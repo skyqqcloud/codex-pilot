@@ -1,0 +1,5 @@
+OPL Fleet Agent core telemetry files, Copyright 2026 Gaofeng.
+Source: https://github.com/gaofeng21cn/opl-fleet-agent
+Revision: 902e2ceafc3716f959915a0dd78bbbeff95ae2e2
+Licensed under Apache License 2.0. See LICENSE.
+Modified by Codex Swap: retain model attribution, support current parent/history metadata, preserve parser state across older log records, and fix byte cursors for concurrent appends.

@@ -1,0 +1,13 @@
+# Local build products and installation backups
+/.build/
+/.swiftpm/
+/dist/
+/backups/
+/design/tps-polish-preview/
+
+# Machine-local files and Python caches
+.DS_Store
+__pycache__/
+*.py[cod]
+.env
+.env.*

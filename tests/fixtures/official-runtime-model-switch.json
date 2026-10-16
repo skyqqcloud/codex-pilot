@@ -1,0 +1,448 @@
+[
+  {
+    "resourceLogs": [
+      {
+        "scopeLogs": [
+          {
+            "logRecords": [
+              {
+                "attributes": [
+                  {
+                    "key": "event.name",
+                    "value": {
+                      "stringValue": "codex.websocket_request"
+                    }
+                  },
+                  {
+                    "key": "event.timestamp",
+                    "value": {
+                      "stringValue": "2026-10-15T01:58:29.780Z"
+                    }
+                  },
+                  {
+                    "key": "model",
+                    "value": {
+                      "stringValue": "gpt-6-astra"
+                    }
+                  },
+                  {
+                    "key": "slug",
+                    "value": {
+                      "stringValue": "gpt-6-astra"
+                    }
+                  },
+                  {
+                    "key": "success",
+                    "value": {
+                      "stringValue": "true"
+                    }
+                  },
+                  {
+                    "key": "conversation.id",
+                    "value": {
+                      "stringValue": "01a13d48-482d-7781-89c5-e3c9284e289a"
+                    }
+                  }
+                ]
+              },
+              {
+                "attributes": [
+                  {
+                    "key": "event.name",
+                    "value": {
+                      "stringValue": "codex.sse_event"
+                    }
+                  },
+                  {
+                    "key": "event.timestamp",
+                    "value": {
+                      "stringValue": "2026-10-15T01:58:29.782Z"
+                    }
+                  },
+                  {
+                    "key": "event.kind",
+                    "value": {
+                      "stringValue": "response.completed"
+                    }
+                  },
+                  {
+                    "key": "model",
+                    "value": {
+                      "stringValue": "gpt-6-astra"
+                    }
+                  },
+                  {
+                    "key": "slug",
+                    "value": {
+                      "stringValue": "gpt-6-astra"
+                    }
+                  },
+                  {
+                    "key": "conversation.id",
+                    "value": {
+                      "stringValue": "01a13d48-482d-7781-89c5-e3c9284e289a"
+                    }
+                  },
+                  {
+                    "key": "output_token_count",
+                    "value": {
+                      "stringValue": "0"
+                    }
+                  },
+                  {
+                    "key": "input_token_count",
+                    "value": {
+                      "stringValue": "0"
+                    }
+                  },
+                  {
+                    "key": "reasoning_token_count",
+                    "value": {
+                      "stringValue": "0"
+                    }
+                  },
+                  {
+                    "key": "cached_token_count",
+                    "value": {
+                      "stringValue": "0"
+                    }
+                  }
+                ]
+              },
+              {
+                "attributes": [
+                  {
+                    "key": "event.name",
+                    "value": {
+                      "stringValue": "codex.websocket_request"
+                    }
+                  },
+                  {
+                    "key": "event.timestamp",
+                    "value": {
+                      "stringValue": "2026-10-15T01:58:29.788Z"
+                    }
+                  },
+                  {
+                    "key": "model",
+                    "value": {
+                      "stringValue": "gpt-6-astra"
+                    }
+                  },
+                  {
+                    "key": "slug",
+                    "value": {
+                      "stringValue": "gpt-6-astra"
+                    }
+                  },
+                  {
+                    "key": "success",
+                    "value": {
+                      "stringValue": "true"
+                    }
+                  },
+                  {
+                    "key": "conversation.id",
+                    "value": {
+                      "stringValue": "01a13d48-482d-7781-89c5-e3c9284e289a"
+                    }
+                  }
+                ]
+              },
+              {
+                "attributes": [
+                  {
+                    "key": "event.name",
+                    "value": {
+                      "stringValue": "codex.sse_event"
+                    }
+                  },
+                  {
+                    "key": "event.timestamp",
+                    "value": {
+                      "stringValue": "2026-10-15T01:58:30.206Z"
+                    }
+                  },
+                  {
+                    "key": "event.kind",
+                    "value": {
+                      "stringValue": "response.completed"
+                    }
+                  },
+                  {
+                    "key": "model",
+                    "value": {
+                      "stringValue": "gpt-6-astra"
+                    }
+                  },
+                  {
+                    "key": "slug",
+                    "value": {
+                      "stringValue": "gpt-6-astra"
+                    }
+                  },
+                  {
+                    "key": "conversation.id",
+                    "value": {
+                      "stringValue": "01a13d48-482d-7781-89c5-e3c9284e289a"
+                    }
+                  },
+                  {
+                    "key": "output_token_count",
+                    "value": {
+                      "stringValue": "304"
+                    }
+                  },
+                  {
+                    "key": "input_token_count",
+                    "value": {
+                      "stringValue": "600"
+                    }
+                  },
+                  {
+                    "key": "reasoning_token_count",
+                    "value": {
+                      "stringValue": "253"
+                    }
+                  },
+                  {
+                    "key": "cached_token_count",
+                    "value": {
+                      "stringValue": "100"
+                    }
+                  },
+                  {
+                    "key": "ttft_ms",
+                    "value": {
+                      "stringValue": "106"
+                    }
+                  }
+                ]
+              },
+              {
+                "attributes": [
+                  {
+                    "key": "event.name",
+                    "value": {
+                      "stringValue": "codex.websocket_request"
+                    }
+                  },
+                  {
+                    "key": "event.timestamp",
+                    "value": {
+                      "stringValue": "2026-10-15T01:58:30.218Z"
+                    }
+                  },
+                  {
+                    "key": "model",
+                    "value": {
+                      "stringValue": "gpt-6-astra"
+                    }
+                  },
+                  {
+                    "key": "slug",
+                    "value": {
+                      "stringValue": "gpt-6-astra"
+                    }
+                  },
+                  {
+                    "key": "success",
+                    "value": {
+                      "stringValue": "true"
+                    }
+                  },
+                  {
+                    "key": "conversation.id",
+                    "value": {
+                      "stringValue": "01a13d48-482d-7781-89c5-e3c9284e289a"
+                    }
+                  }
+                ]
+              },
+              {
+                "attributes": [
+                  {
+                    "key": "event.name",
+                    "value": {
+                      "stringValue": "codex.sse_event"
+                    }
+                  },
+                  {
+                    "key": "event.timestamp",
+                    "value": {
+                      "stringValue": "2026-10-15T01:58:30.643Z"
+                    }
+                  },
+                  {
+                    "key": "event.kind",
+                    "value": {
+                      "stringValue": "response.completed"
+                    }
+                  },
+                  {
+                    "key": "model",
+                    "value": {
+                      "stringValue": "gpt-6-luna"
+                    }
+                  },
+                  {
+                    "key": "slug",
+                    "value": {
+                      "stringValue": "gpt-6-luna"
+                    }
+                  },
+                  {
+                    "key": "conversation.id",
+                    "value": {
+                      "stringValue": "01a13d48-482d-7781-89c5-e3c9284e289a"
+                    }
+                  },
+                  {
+                    "key": "output_token_count",
+                    "value": {
+                      "stringValue": "304"
+                    }
+                  },
+                  {
+                    "key": "input_token_count",
+                    "value": {
+                      "stringValue": "600"
+                    }
+                  },
+                  {
+                    "key": "reasoning_token_count",
+                    "value": {
+                      "stringValue": "253"
+                    }
+                  },
+                  {
+                    "key": "cached_token_count",
+                    "value": {
+                      "stringValue": "100"
+                    }
+                  },
+                  {
+                    "key": "ttft_ms",
+                    "value": {
+                      "stringValue": "109"
+                    }
+                  }
+                ]
+              },
+              {
+                "attributes": [
+                  {
+                    "key": "event.name",
+                    "value": {
+                      "stringValue": "codex.websocket_request"
+                    }
+                  },
+                  {
+                    "key": "event.timestamp",
+                    "value": {
+                      "stringValue": "2026-10-15T01:58:30.667Z"
+                    }
+                  },
+                  {
+                    "key": "model",
+                    "value": {
+                      "stringValue": "gpt-6-astra"
+                    }
+                  },
+                  {
+                    "key": "slug",
+                    "value": {
+                      "stringValue": "gpt-6-astra"
+                    }
+                  },
+                  {
+                    "key": "success",
+                    "value": {
+                      "stringValue": "true"
+                    }
+                  },
+                  {
+                    "key": "conversation.id",
+                    "value": {
+                      "stringValue": "01a13d48-482d-7781-89c5-e3c9284e289a"
+                    }
+                  }
+                ]
+              },
+              {
+                "attributes": [
+                  {
+                    "key": "event.name",
+                    "value": {
+                      "stringValue": "codex.sse_event"
+                    }
+                  },
+                  {
+                    "key": "event.timestamp",
+                    "value": {
+                      "stringValue": "2026-10-15T01:58:31.081Z"
+                    }
+                  },
+                  {
+                    "key": "event.kind",
+                    "value": {
+                      "stringValue": "response.completed"
+                    }
+                  },
+                  {
+                    "key": "model",
+                    "value": {
+                      "stringValue": "gpt-6-luna"
+                    }
+                  },
+                  {
+                    "key": "slug",
+                    "value": {
+                      "stringValue": "gpt-6-luna"
+                    }
+                  },
+                  {
+                    "key": "conversation.id",
+                    "value": {
+                      "stringValue": "01a13d48-482d-7781-89c5-e3c9284e289a"
+                    }
+                  },
+                  {
+                    "key": "output_token_count",
+                    "value": {
+                      "stringValue": "304"
+                    }
+                  },
+                  {
+                    "key": "input_token_count",
+                    "value": {
+                      "stringValue": "600"
+                    }
+                  },
+                  {
+                    "key": "reasoning_token_count",
+                    "value": {
+                      "stringValue": "253"
+                    }
+                  },
+                  {
+                    "key": "cached_token_count",
+                    "value": {
+                      "stringValue": "100"
+                    }
+                  },
+                  {
+                    "key": "ttft_ms",
+                    "value": {
+                      "stringValue": "105"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,290 @@
+[
+  {
+    "resourceLogs": [
+      {
+        "scopeLogs": [
+          {
+            "logRecords": [
+              {
+                "attributes": [
+                  {
+                    "key": "event.name",
+                    "value": {
+                      "stringValue": "codex.websocket_request"
+                    }
+                  },
+                  {
+                    "key": "success",
+                    "value": {
+                      "stringValue": "true"
+                    }
+                  },
+                  {
+                    "key": "event.timestamp",
+                    "value": {
+                      "stringValue": "2026-10-12T01:58:09.754Z"
+                    }
+                  },
+                  {
+                    "key": "conversation.id",
+                    "value": {
+                      "stringValue": "01a12dd4-e5f6-7cf1-ace8-dcec8c5df1f9"
+                    }
+                  },
+                  {
+                    "key": "model",
+                    "value": {
+                      "stringValue": "gpt-mock"
+                    }
+                  }
+                ]
+              },
+              {
+                "attributes": [
+                  {
+                    "key": "event.name",
+                    "value": {
+                      "stringValue": "codex.sse_event"
+                    }
+                  },
+                  {
+                    "key": "event.kind",
+                    "value": {
+                      "stringValue": "response.completed"
+                    }
+                  },
+                  {
+                    "key": "input_token_count",
+                    "value": {
+                      "stringValue": "0"
+                    }
+                  },
+                  {
+                    "key": "output_token_count",
+                    "value": {
+                      "stringValue": "0"
+                    }
+                  },
+                  {
+                    "key": "cached_token_count",
+                    "value": {
+                      "intValue": "0"
+                    }
+                  },
+                  {
+                    "key": "reasoning_token_count",
+                    "value": {
+                      "intValue": "0"
+                    }
+                  },
+                  {
+                    "key": "event.timestamp",
+                    "value": {
+                      "stringValue": "2026-10-12T01:58:09.756Z"
+                    }
+                  },
+                  {
+                    "key": "conversation.id",
+                    "value": {
+                      "stringValue": "01a12dd4-e5f6-7cf1-ace8-dcec8c5df1f9"
+                    }
+                  },
+                  {
+                    "key": "model",
+                    "value": {
+                      "stringValue": "gpt-mock"
+                    }
+                  }
+                ]
+              },
+              {
+                "attributes": [
+                  {
+                    "key": "event.name",
+                    "value": {
+                      "stringValue": "codex.websocket_request"
+                    }
+                  },
+                  {
+                    "key": "success",
+                    "value": {
+                      "stringValue": "true"
+                    }
+                  },
+                  {
+                    "key": "event.timestamp",
+                    "value": {
+                      "stringValue": "2026-10-12T01:58:09.760Z"
+                    }
+                  },
+                  {
+                    "key": "conversation.id",
+                    "value": {
+                      "stringValue": "01a12dd4-e5f6-7cf1-ace8-dcec8c5df1f9"
+                    }
+                  },
+                  {
+                    "key": "model",
+                    "value": {
+                      "stringValue": "gpt-mock"
+                    }
+                  }
+                ]
+              },
+              {
+                "attributes": [
+                  {
+                    "key": "event.name",
+                    "value": {
+                      "stringValue": "codex.sse_event"
+                    }
+                  },
+                  {
+                    "key": "event.kind",
+                    "value": {
+                      "stringValue": "response.completed"
+                    }
+                  },
+                  {
+                    "key": "error.message",
+                    "value": {
+                      "stringValue": "stream disconnected before completion"
+                    }
+                  },
+                  {
+                    "key": "event.timestamp",
+                    "value": {
+                      "stringValue": "2026-10-12T01:58:09.965Z"
+                    }
+                  },
+                  {
+                    "key": "conversation.id",
+                    "value": {
+                      "stringValue": "01a12dd4-e5f6-7cf1-ace8-dcec8c5df1f9"
+                    }
+                  },
+                  {
+                    "key": "model",
+                    "value": {
+                      "stringValue": "gpt-mock"
+                    }
+                  }
+                ]
+              },
+              {
+                "attributes": [
+                  {
+                    "key": "event.name",
+                    "value": {
+                      "stringValue": "codex.websocket_request"
+                    }
+                  },
+                  {
+                    "key": "success",
+                    "value": {
+                      "stringValue": "true"
+                    }
+                  },
+                  {
+                    "key": "event.timestamp",
+                    "value": {
+                      "stringValue": "2026-10-12T01:58:10.268Z"
+                    }
+                  },
+                  {
+                    "key": "conversation.id",
+                    "value": {
+                      "stringValue": "01a12dd4-e5f6-7cf1-ace8-dcec8c5df1f9"
+                    }
+                  },
+                  {
+                    "key": "model",
+                    "value": {
+                      "stringValue": "gpt-mock"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "resourceLogs": [
+      {
+        "scopeLogs": [
+          {
+            "logRecords": [
+              {
+                "attributes": [
+                  {
+                    "key": "event.name",
+                    "value": {
+                      "stringValue": "codex.sse_event"
+                    }
+                  },
+                  {
+                    "key": "event.kind",
+                    "value": {
+                      "stringValue": "response.completed"
+                    }
+                  },
+                  {
+                    "key": "input_token_count",
+                    "value": {
+                      "stringValue": "600"
+                    }
+                  },
+                  {
+                    "key": "output_token_count",
+                    "value": {
+                      "stringValue": "304"
+                    }
+                  },
+                  {
+                    "key": "cached_token_count",
+                    "value": {
+                      "intValue": "100"
+                    }
+                  },
+                  {
+                    "key": "reasoning_token_count",
+                    "value": {
+                      "intValue": "253"
+                    }
+                  },
+                  {
+                    "key": "ttft_ms",
+                    "value": {
+                      "intValue": "1508"
+                    }
+                  },
+                  {
+                    "key": "event.timestamp",
+                    "value": {
+                      "stringValue": "2026-10-12T01:58:13.846Z"
+                    }
+                  },
+                  {
+                    "key": "conversation.id",
+                    "value": {
+                      "stringValue": "01a12dd4-e5f6-7cf1-ace8-dcec8c5df1f9"
+                    }
+                  },
+                  {
+                    "key": "model",
+                    "value": {
+                      "stringValue": "gpt-mock"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

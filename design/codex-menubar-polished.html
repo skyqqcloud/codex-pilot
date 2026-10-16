@@ -1,0 +1,333 @@
+<div id="codex-polished-ui" aria-label="Codex 切号，精修状态栏界面">
+  <style>
+    #codex-polished-ui { --cp-paper:light-dark(#fbfbfa,#272729); --cp-ink:light-dark(#262628,#f2f2f0); --cp-sub:light-dark(#68686c,#b3b3b6); --cp-rule:light-dark(#e2e2df,#414144); --cp-inset:light-dark(#f0f0ee,#333335); --cp-hover:light-dark(#e9e9e6,#3b3b3e); --cp-track:light-dark(#e3e5e1,#454846); --cp-green:light-dark(#35745d,#7eb799); --cp-amber:light-dark(#955c1c,#e5b26e); --cp-red:light-dark(#be5148,#ed9a91); --cp-action:light-dark(#2d2d2f,#ededea); --cp-action-ink:light-dark(#ffffff,#252527); --cp-focus:light-dark(#0769dc,#87b7f3); --cp-note:light-dark(#f5efe5,#3b342c); color:var(--cp-ink); font:13px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",sans-serif; color-scheme:light dark; }
+    #codex-polished-ui *, #codex-polished-ui *::before, #codex-polished-ui *::after { box-sizing:border-box; }
+    #codex-polished-ui [hidden] { display:none !important; }
+    #codex-polished-ui .cp-stage { padding:22px 18px 32px; }
+    #codex-polished-ui .cp-menubar { height:37px; max-width:600px; margin:0 auto; background:var(--cp-inset); border-radius:7px 7px 0 0; position:relative; display:flex; align-items:center; justify-content:flex-end; padding:0 16px; gap:15px; }
+    #codex-polished-ui .cp-preview-label { font-size:11px; color:var(--cp-sub); margin-right:auto; }
+    #codex-polished-ui i, #codex-polished-ui svg.lucide { width:15px; height:15px; display:inline-flex; flex-shrink:0; }
+    #codex-polished-ui button, #codex-polished-ui input, #codex-polished-ui select { font:inherit; color:inherit; }
+    #codex-polished-ui button { background:transparent; border:0; border-radius:7px; }
+    #codex-polished-ui button:hover { background:var(--cp-hover); }
+    #codex-polished-ui button:disabled { opacity:.45; }
+    #codex-polished-ui button:focus-visible, #codex-polished-ui select:focus-visible, #codex-polished-ui input:focus-visible, #codex-polished-ui summary:focus-visible { outline:2px solid var(--cp-focus); outline-offset:2px; }
+    #codex-polished-ui .cp-trigger { position:absolute; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:6px; min-height:28px; padding:5px 8px; background:var(--cp-hover); border-radius:5px; font-size:12px; font-variant-numeric:tabular-nums; }
+    #codex-polished-ui .cp-trigger[aria-expanded="false"] { background:transparent; }
+    #codex-polished-ui .cp-date { font-size:12px; white-space:nowrap; }
+    #codex-polished-ui .cp-panel { width:min(100%,380px); margin:8px auto 0; background:var(--cp-paper); border:1px solid var(--cp-rule); border-radius:15px; box-shadow:0 3px 9px light-dark(#0000000a,#00000018),0 15px 38px light-dark(#00000018,#00000040); position:relative; overflow:hidden; }
+    #codex-polished-ui .cp-header { min-height:49px; padding:12px 17px 8px; display:flex; align-items:center; gap:8px; }
+    #codex-polished-ui .cp-header h2 { font-size:14px; font-weight:600; margin:0; letter-spacing:-.15px; }
+    #codex-polished-ui .cp-header .cp-icon-button:last-child { margin-left:auto; }
+    #codex-polished-ui .cp-icon-button { width:27px; height:27px; padding:5px; display:inline-flex; align-items:center; justify-content:center; color:var(--cp-sub); }
+    #codex-polished-ui .cp-header-mark { color:var(--cp-sub); }
+    #codex-polished-ui .cp-throughput { padding:8px 18px 10px; }
+    #codex-polished-ui .cp-throughput-head { display:flex; align-items:center; gap:9px; color:var(--cp-sub); font-size:12px; }
+    #codex-polished-ui .cp-segment { display:flex; margin-left:auto; background:var(--cp-inset); border-radius:6px; padding:2px; }
+    #codex-polished-ui .cp-segment button { min-height:23px; padding:2px 9px; font-size:11px; color:var(--cp-sub); border-radius:4px; }
+    #codex-polished-ui .cp-segment button[aria-pressed="true"] { background:var(--cp-paper); color:var(--cp-ink); box-shadow:0 1px 3px light-dark(#00000010,#00000028); }
+    #codex-polished-ui .cp-reading { display:flex; align-items:baseline; gap:6px; padding:9px 0 5px; }
+    #codex-polished-ui .cp-reading strong { font-size:30px; line-height:1.15; font-weight:500; letter-spacing:-.7px; font-variant-numeric:tabular-nums; }
+    #codex-polished-ui .cp-unit { font-size:12px; color:var(--cp-sub); }
+    #codex-polished-ui .cp-model-select { margin-left:auto; background:transparent; border:0; max-width:142px; font-size:11px; color:var(--cp-sub); padding:3px 0; }
+    #codex-polished-ui .cp-reading-bottom { display:flex; align-items:center; gap:12px; font-size:11px; color:var(--cp-sub); }
+    #codex-polished-ui .cp-reading-bottom button { margin-left:auto; padding:3px 0 3px 5px; display:flex; gap:2px; align-items:center; color:var(--cp-sub); font-size:11px; }
+    #codex-polished-ui .cp-reading-bottom i { width:12px; height:12px; }
+    #codex-polished-ui .cp-divider { height:1px; background:var(--cp-rule); margin:0 18px; }
+    #codex-polished-ui .cp-section-head { padding:10px 18px 5px; display:flex; align-items:center; gap:7px; }
+    #codex-polished-ui .cp-section-head h3 { font-size:12px; font-weight:500; margin:0; }
+    #codex-polished-ui .cp-count { font-size:11px; color:var(--cp-sub); }
+    #codex-polished-ui .cp-section-head .cp-label { margin-left:auto; font-size:11px; color:var(--cp-sub); }
+    #codex-polished-ui .cp-section-head .cp-icon-button { margin-right:-5px; }
+    #codex-polished-ui .cp-accounts { padding:0 8px; }
+    #codex-polished-ui .cp-account { width:100%; text-align:left; padding:9px 10px 10px; display:block; border-radius:9px; position:relative; }
+    #codex-polished-ui .cp-account + .cp-account { margin-top:2px; }
+    #codex-polished-ui .cp-account[data-current="true"] { background:var(--cp-inset); }
+    #codex-polished-ui .cp-identity { display:flex; align-items:center; gap:7px; min-height:19px; }
+    #codex-polished-ui .cp-account-name { font-size:13px; font-weight:600; }
+    #codex-polished-ui .cp-current { display:inline-flex; align-items:center; gap:3px; color:var(--cp-green); font-size:11px; }
+    #codex-polished-ui .cp-current i { width:12px; height:12px; }
+    #codex-polished-ui .cp-email { color:var(--cp-sub); font-size:11px; margin-left:auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; max-width:186px; }
+    #codex-polished-ui .cp-switch-cue { width:11px !important; height:11px !important; color:var(--cp-sub); }
+    #codex-polished-ui .cp-quota-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:17px; margin-top:9px; }
+    #codex-polished-ui .cp-quota-top { display:flex; align-items:baseline; justify-content:space-between; gap:5px; font-size:11px; color:var(--cp-sub); }
+    #codex-polished-ui .cp-quota-top strong { color:var(--cp-ink); font-weight:500; font-size:12px; font-variant-numeric:tabular-nums; }
+    #codex-polished-ui .cp-progress { height:5px; background:var(--cp-track); margin:5px 0 5px; border-radius:3px; overflow:hidden; }
+    #codex-polished-ui .cp-progress span { display:block; height:100%; width:var(--cp-pct); background:var(--cp-green); border-radius:3px; transition:width 160ms ease; }
+    #codex-polished-ui .cp-progress.low span { background:var(--cp-amber); }
+    #codex-polished-ui .cp-progress.critical span { background:var(--cp-red); }
+    #codex-polished-ui .cp-progress.stale span { background:var(--cp-sub); opacity:.45; }
+    #codex-polished-ui .cp-reset { color:var(--cp-sub); font-size:11px; line-height:1.3; }
+    #codex-polished-ui .cp-quota-meta { padding:7px 18px 10px; color:var(--cp-sub); font-size:11px; display:flex; gap:8px; justify-content:space-between; }
+    #codex-polished-ui .cp-quota-meta .cp-auto { display:flex; align-items:center; gap:4px; }
+    #codex-polished-ui .cp-quota-meta i { width:11px; height:11px; }
+    #codex-polished-ui .cp-actions { padding:6px 8px; }
+    #codex-polished-ui .cp-action { display:flex; align-items:center; gap:10px; width:100%; min-height:32px; padding:7px 10px; text-align:left; font-size:12px; }
+    #codex-polished-ui .cp-action i { color:var(--cp-sub); width:14px; height:14px; }
+    #codex-polished-ui .cp-action .cp-key, #codex-polished-ui .cp-action .cp-trailing { margin-left:auto; color:var(--cp-sub); font-size:11px; }
+    #codex-polished-ui .cp-save-needed { background:var(--cp-inset); font-weight:500; }
+    #codex-polished-ui .cp-footer { padding:8px 18px 10px; display:flex; align-items:center; gap:8px; font-size:11px; color:var(--cp-sub); }
+    #codex-polished-ui .cp-footer span:last-child { margin-left:auto; }
+    #codex-polished-ui .cp-quit { padding:3px 0; font-size:11px; color:var(--cp-sub); }
+    #codex-polished-ui .cp-notice { margin:7px 18px 9px; padding:9px 10px; font-size:11px; color:var(--cp-amber); background:var(--cp-note); border-radius:7px; display:flex; gap:7px; align-items:start; }
+    #codex-polished-ui .cp-notice i { width:13px; height:13px; margin-top:1px; }
+    #codex-polished-ui .cp-notice button { color:inherit; font-size:11px; text-decoration:underline; padding:0; margin-left:auto; flex:none; }
+    #codex-polished-ui .cp-toast { margin:0 18px 9px; font-size:11px; color:var(--cp-green); display:flex; gap:6px; align-items:center; }
+    #codex-polished-ui .cp-empty { padding:14px 0 5px; }
+    #codex-polished-ui .cp-empty strong { display:block; font-size:13px; font-weight:500; }
+    #codex-polished-ui .cp-empty p { margin:5px 0 0; font-size:11px; color:var(--cp-sub); line-height:1.6; }
+    #codex-polished-ui .cp-secondary { padding:6px 18px 18px; min-height:240px; }
+    #codex-polished-ui .cp-page-label { font-size:11px; color:var(--cp-sub); margin:15px 0 5px; }
+    #codex-polished-ui .cp-setting { padding:11px 0; display:flex; gap:12px; align-items:center; border-bottom:1px solid var(--cp-rule); }
+    #codex-polished-ui .cp-setting > label { display:flex; align-items:center; gap:12px; width:100%; }
+    #codex-polished-ui .cp-setting input[type="checkbox"] { width:16px; height:16px; margin-left:auto; accent-color:var(--cp-action); flex:none; }
+    #codex-polished-ui .cp-setting select { background:var(--cp-inset); border:0; padding:5px 7px; border-radius:5px; margin-left:auto; font-size:12px; max-width:170px; }
+    #codex-polished-ui .cp-setting small { display:block; color:var(--cp-sub); font-size:11px; margin-top:3px; }
+    #codex-polished-ui .cp-help { font-size:11px; color:var(--cp-sub); line-height:1.65; margin:10px 0 0; }
+    #codex-polished-ui .cp-stat-row { display:flex; justify-content:space-between; gap:14px; align-items:center; padding:12px 0; border-bottom:1px solid var(--cp-rule); font-size:12px; }
+    #codex-polished-ui .cp-stat-row strong { font-size:13px; font-weight:500; font-variant-numeric:tabular-nums; }
+    #codex-polished-ui .cp-stat-row small { color:var(--cp-sub); font-size:11px; margin-left:4px; }
+    #codex-polished-ui .cp-secondary details { margin-top:16px; }
+    #codex-polished-ui summary { color:var(--cp-sub); font-size:12px; padding:4px 0; }
+    #codex-polished-ui .cp-stat-subrow { color:var(--cp-sub); font-size:11px; padding:8px 0; display:flex; justify-content:space-between; gap:10px; }
+    #codex-polished-ui .cp-stat-subrow strong { font-weight:400; color:var(--cp-ink); font-variant-numeric:tabular-nums; }
+    #codex-polished-ui .cp-manage-row { padding:13px 0; border-bottom:1px solid var(--cp-rule); display:flex; gap:6px; align-items:center; }
+    #codex-polished-ui .cp-manage-identity { flex:1; min-width:0; }
+    #codex-polished-ui .cp-manage-identity small { display:block; margin-top:4px; color:var(--cp-sub); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #codex-polished-ui .cp-manage-row .cp-icon-button { width:25px; }
+    #codex-polished-ui .cp-danger { color:var(--cp-red); }
+    #codex-polished-ui .cp-empty-accounts { padding:16px 18px 22px; }
+    #codex-polished-ui .cp-modal { position:absolute; inset:0; z-index:4; display:flex; flex-direction:column; justify-content:center; padding:25px; background:var(--cp-paper); }
+    #codex-polished-ui .cp-dialog-mark { width:40px; height:40px; background:var(--cp-inset); color:var(--cp-sub); border-radius:11px; display:flex; align-items:center; justify-content:center; margin-bottom:16px; }
+    #codex-polished-ui .cp-dialog-mark i { width:20px; height:20px; }
+    #codex-polished-ui .cp-modal h3 { font-size:17px; font-weight:500; letter-spacing:-.3px; margin:0 0 7px; }
+    #codex-polished-ui .cp-modal p { font-size:12px; color:var(--cp-sub); line-height:1.65; margin:0 0 20px; }
+    #codex-polished-ui .cp-dialog-buttons { display:flex; gap:8px; justify-content:flex-end; }
+    #codex-polished-ui .cp-dialog-buttons button { min-height:32px; padding:7px 12px; background:var(--cp-inset); font-size:12px; }
+    #codex-polished-ui .cp-dialog-buttons .cp-primary { background:var(--cp-action); color:var(--cp-action-ink); }
+    #codex-polished-ui .cp-dialog-buttons .cp-delete-button { background:var(--cp-red); color:light-dark(#ffffff,#32100b); }
+    #codex-polished-ui .cp-busy-icon { animation:cp-spin .8s linear infinite; }
+    @keyframes cp-spin { to { transform:rotate(360deg); } }
+    @media(prefers-reduced-motion:reduce) { #codex-polished-ui .cp-progress span { transition:none; } #codex-polished-ui .cp-busy-icon { animation:none; } }
+    @media(max-width:420px) { #codex-polished-ui .cp-stage { padding:15px 4px 24px; } #codex-polished-ui .cp-menubar { padding:0 10px; } #codex-polished-ui .cp-menubar > i, #codex-polished-ui .cp-menubar > svg { display:none; } #codex-polished-ui .cp-preview-label { max-width:90px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; } #codex-polished-ui .cp-email { max-width:154px; } #codex-polished-ui .cp-quota-grid { gap:13px; } }
+    @media(max-width:350px) { #codex-polished-ui .cp-email { max-width:128px; } #codex-polished-ui .cp-throughput, #codex-polished-ui .cp-secondary { padding-left:13px; padding-right:13px; } #codex-polished-ui .cp-model-select { max-width:122px; } #codex-polished-ui .cp-preview-label { max-width:65px; } #codex-polished-ui .cp-date { font-size:11px; } #codex-polished-ui .cp-trigger { max-width:112px; } }
+    @media(pointer:coarse) { #codex-polished-ui .cp-action, #codex-polished-ui .cp-icon-button, #codex-polished-ui .cp-segment button, #codex-polished-ui .cp-dialog-buttons button { min-height:44px; } #codex-polished-ui select { font-size:16px; } }
+  </style>
+  <div class="cp-stage viz-dotted-background">
+    <div class="cp-menubar" aria-label="macOS 状态栏预览">
+      <span class="cp-preview-label">设计预览 · 演示数据</span>
+      <button id="cp-trigger" class="cp-trigger cursor-interaction" aria-label="打开 Codex 切号" aria-expanded="true" aria-controls="cp-panel"><i data-lucide="arrow-left-right" aria-hidden="true"></i><span id="cp-bar-rate" hidden>87.5 t/s</span></button>
+      <i data-lucide="wifi" aria-hidden="true"></i><i data-lucide="battery-charging" aria-hidden="true"></i><span class="cp-date">10 月 9 日</span>
+    </div>
+    <div id="cp-panel" class="cp-panel" role="region" aria-label="Codex 切号弹出面板">
+      <div id="cp-content">
+        <header class="cp-header"><i id="cp-header-mark" class="cp-header-mark" data-lucide="square-terminal" aria-hidden="true"></i><button id="cp-back" class="cp-icon-button cursor-interaction" aria-label="返回" hidden><i data-lucide="chevron-left" aria-hidden="true"></i></button><h2 id="cp-title">Codex 切号</h2><button id="cp-settings" class="cp-icon-button cursor-interaction" aria-label="设置" data-tooltip="设置"><i data-lucide="settings-2" aria-hidden="true"></i></button></header>
+        <main id="cp-main">
+          <div id="cp-auth-notice" class="cp-notice" role="status" hidden></div>
+          <section class="cp-throughput" aria-label="本机输出吞吐">
+            <div class="cp-throughput-head"><span>本机输出吞吐</span><div class="cp-segment" aria-label="统计窗口"><button class="cursor-interaction" data-period="60" aria-pressed="true">1 分钟</button><button class="cursor-interaction" data-period="300" aria-pressed="false">5 分钟</button></div></div>
+            <div id="cp-readout" aria-live="polite"><div class="cp-reading"><strong id="cp-output">87.5</strong><span class="cp-unit">token/s</span><select id="cp-model" class="cp-model-select cursor-interaction" aria-label="选择统计模型"><option value="all">全部模型</option><option value="sol">gpt-6.1-sol</option><option value="astra">gpt-6-astra</option></select></div><div class="cp-reading-bottom"><span><span id="cp-requests">10</span> 次完成</span><span><span id="cp-sessions">3</span> 个会话</span><button class="cursor-interaction" data-page="stats">统计详情<i data-lucide="chevron-right" aria-hidden="true"></i></button></div></div>
+            <div id="cp-read-error" class="cp-empty" hidden><strong>暂时无法读取本机统计</strong><p>检查本地记录的访问权限后重试。<button class="cursor-interaction" data-action="retry-stats" style="text-decoration:underline;padding:0;color:inherit">重试</button></p></div>
+          </section>
+          <div class="cp-divider"></div>
+          <section aria-label="账号与剩余额度">
+            <div class="cp-section-head"><h3>账号</h3><span id="cp-account-count" class="cp-count">3</span><span class="cp-label">剩余额度</span><button id="cp-refresh" class="cp-icon-button cursor-interaction" aria-label="刷新账号额度" data-tooltip="联网刷新所有账号额度"><i data-lucide="refresh-cw" aria-hidden="true"></i></button></div>
+            <div id="cp-quota-notice" class="cp-notice" role="status" hidden></div><div id="cp-accounts" class="cp-accounts"></div>
+            <div class="cp-quota-meta"><span id="cp-quota-time">11:30 更新</span><span id="cp-auto-label" class="cp-auto"><i data-lucide="clock-arrow-up" aria-hidden="true"></i>Pro 自动刷新</span></div>
+          </section>
+          <div class="cp-divider"></div>
+          <div class="cp-actions"><button id="cp-save" class="cp-action cursor-interaction" data-action="save"><i data-lucide="bookmark" aria-hidden="true"></i>保存登录<span class="cp-key">⌘ S</span></button><button class="cp-action cursor-interaction" data-action="add"><i data-lucide="plus" aria-hidden="true"></i>添加账号…</button><button class="cp-action cursor-interaction" data-page="manage"><i data-lucide="users-round" aria-hidden="true"></i>管理账号<span class="cp-trailing">›</span></button></div>
+          <div id="cp-toast" class="cp-toast" role="status" hidden></div>
+          <div class="cp-divider"></div><footer class="cp-footer"><button class="cp-quit cursor-interaction" data-action="quit">退出 Codex 切号</button><span>本地统计每 15 秒更新</span></footer>
+        </main>
+        <section id="cp-secondary" class="cp-secondary" hidden></section>
+      </div>
+      <div id="cp-modal" class="cp-modal" role="dialog" aria-modal="true" aria-labelledby="cp-dialog-title" hidden></div>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const root = document.getElementById('codex-polished-ui');
+      const $ = selector => root.querySelector(selector);
+      const prefs = { appearance:'跟随系统', scenario:'正常', showTPS:false };
+      const seed = [
+        {id:'pro',name:'Pro',email:'work•••@gmail.com',five:62,week:38,fiveReset:'2小时14分后重置',weekReset:'3天8小时后重置'},
+        {id:'plus',name:'Plus',email:'personal•••@outlook.com',five:94,week:81,fiveReset:'4小时32分后重置',weekReset:'5天2小时后重置'},
+        {id:'lite',name:'Pro Lite',email:'backup•••@gmail.com',five:8,week:24,fiveReset:'48分钟后重置',weekReset:'1天6小时后重置'}
+      ];
+      const samples = {
+        60:{all:{output:87.5,input:24077.7,reasoning:28.5,cache:77,requests:10,sessions:3},sol:{output:70.4,input:20433.3,reasoning:23,cache:76,requests:8,sessions:2},astra:{output:17.1,input:3644.4,reasoning:5.5,cache:82,requests:2,sessions:1}},
+        300:{all:{output:46.2,input:10891,reasoning:14.6,cache:86,requests:27,sessions:3},sol:{output:37.8,input:9069.2,reasoning:12,cache:85,requests:22,sessions:2},astra:{output:8.4,input:1821.8,reasoning:2.6,cache:91,requests:5,sessions:1}}
+      };
+      const state = {open:true,page:'main',period:60,model:'all',current:'pro',accounts:seed.map(a=>({...a})),auto:new Set(['pro']),startLogin:false,pending:false,modal:null,quotaBusy:false,quotaUpdated:false,toast:'',dragID:null,newIndex:0};
+      const format = number => Number(number).toLocaleString('en-US',{minimumFractionDigits:1,maximumFractionDigits:1});
+      const escape = value => String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+      const icon = name => '<i data-lucide="'+name+'" aria-hidden="true"></i>';
+      const needsSave = () => state.pending || prefs.scenario==='当前登录未保存';
+      const modelName = value => value==='all'?'全部模型':value==='sol'?'gpt-6.1-sol':'gpt-6-astra';
+      const windowName = () => state.period===60?'1 分钟':'5 分钟';
+      function metrics(model=state.model) {
+        const result={...samples[state.period][model]};
+        if(prefs.scenario==='暂无完成请求')Object.assign(result,{output:0,input:0,reasoning:0,cache:null,requests:0});
+        return result;
+      }
+      function icons() { if(globalThis.lucide)lucide.createIcons({attrs:{width:15,height:15}}); }
+      function remember() {
+        if(window.openai && typeof window.openai.setWidgetState==='function') {
+          window.openai.setWidgetState({modelContent:{design:'紧凑面板',appearance:prefs.appearance,scenario:prefs.scenario,showTPS:prefs.showTPS},privateContent:{period:state.period,model:state.model,current:state.current,page:state.page,startLogin:state.startLogin,auto:Array.from(state.auto)}}).catch(()=>{});
+        }
+      }
+      function applySaved(saved) {
+        if(!saved)return;
+        const visible=saved.modelContent||{},view=saved.privateContent||{};
+        if(['跟随系统','浅色','深色'].includes(visible.appearance))prefs.appearance=visible.appearance;
+        if(['正常','额度过期','暂无完成请求','统计读取失败','当前登录未保存'].includes(visible.scenario))prefs.scenario=visible.scenario;
+        if(typeof visible.showTPS==='boolean')prefs.showTPS=visible.showTPS;
+        if(samples[view.period])state.period=view.period;
+        if(['all','sol','astra'].includes(view.model))state.model=view.model;
+        if(seed.some(a=>a.id===view.current))state.current=view.current;
+        if(['main','settings','stats','manage'].includes(view.page))state.page=view.page;
+        if(typeof view.startLogin==='boolean')state.startLogin=view.startLogin;
+        if(Array.isArray(view.auto))state.auto=new Set(view.auto.filter(id=>seed.some(a=>a.id===id)));
+      }
+      function quota(label,value,reset) {
+        const known=value!==null,stale=prefs.scenario==='额度过期';
+        const low=known&&value<=30;
+        const classes=(known&&value<=10?'critical':low?'low':'')+(stale?' stale':'');
+        return '<div><div class="cp-quota-top"><span>'+label+'</span><strong>'+(known?value+'%':'—')+'</strong></div><div class="cp-progress '+classes+'" style="--cp-pct:'+(known?value:0)+'%" role="progressbar" aria-label="'+label+'剩余额度" aria-valuemin="0" aria-valuemax="100" '+(known?'aria-valuenow="'+value+'"':'aria-valuetext="尚未刷新"')+'><span></span></div><div class="cp-reset">'+(stale?'待刷新':known?escape(reset):'刷新后显示')+'</div></div>';
+      }
+      function accountsHTML() {
+        if(!state.accounts.length)return '<div class="cp-empty-accounts cp-empty"><strong>还没有保存的账号</strong><p>登录 Codex 后，点「保存登录」记录当前账号。</p></div>';
+        return state.accounts.map(a=>{
+          const current=a.id===state.current&&!needsSave();
+          return '<button class="cp-account cursor-interaction" data-account="'+a.id+'" data-current="'+current+'" '+(needsSave()||state.quotaBusy?'disabled':'')+' data-tooltip="'+escape(a.name+' '+a.email)+'" aria-label="'+(current?'当前账号 ':'切换到 ')+escape(a.name)+'，'+escape(a.email)+'"><div class="cp-identity"><span class="cp-account-name">'+escape(a.name)+'</span>'+(current?'<span class="cp-current">'+icon('check')+'当前</span>':'')+'<span class="cp-email">'+escape(a.email)+'</span>'+(current?'':icon('chevron-right').replace('<i ','<i class="cp-switch-cue" '))+'</div><div class="cp-quota-grid">'+quota('5 小时',a.five,a.fiveReset)+quota('7 天',a.week,a.weekReset)+'</div></button>';
+        }).join('');
+      }
+      function selectMarkup(selected,attribute,options) {
+        return '<select '+attribute+' class="cursor-interaction">'+options.map(([value,label])=>'<option value="'+value+'" '+(String(value)===String(selected)?'selected':'')+'>'+label+'</option>').join('')+'</select>';
+      }
+      const periodOptions=[[60,'最近 1 分钟'],[300,'最近 5 分钟']];
+      const modelOptions=[['all','全部模型'],['sol','gpt-6.1-sol'],['astra','gpt-6-astra']];
+      function statsHTML() {
+        const m=metrics(),failure=prefs.scenario==='统计读取失败';
+        return '<div class="cp-setting"><label>统计窗口'+selectMarkup(state.period,'data-stat-period aria-label="统计窗口"',periodOptions)+'</label></div><div class="cp-setting"><label>统计模型'+selectMarkup(state.model,'data-stat-model aria-label="统计模型"',modelOptions)+'</label></div>'+(failure?'<div class="cp-empty"><strong>统计暂不可用</strong><p>检查本地记录的访问权限后重试。</p></div>':'<div class="cp-page-label">输出吞吐 <span style="float:right">token/s</span></div>'+['sol','astra'].filter(model=>state.model==='all'||model===state.model).map(model=>'<div class="cp-stat-row"><span>'+modelName(model)+'</span><strong>'+format(metrics(model).output)+'</strong></div>').join('')+'<div class="cp-stat-subrow"><span>窗口内完成请求</span><strong>'+m.requests+' 次</strong></div><div class="cp-stat-subrow"><span>活跃会话</span><strong>'+m.sessions+' 个</strong></div><details><summary class="cursor-interaction">更多用量指标</summary><div class="cp-stat-subrow"><span>输入 token/s</span><strong>'+format(m.input)+'</strong></div><div class="cp-stat-subrow"><span>推理 token/s</span><strong>'+format(m.reasoning)+'</strong></div><div class="cp-stat-subrow"><span>缓存比例</span><strong>'+(m.cache===null?'—':m.cache+'%')+'</strong></div><div class="cp-stat-subrow"><span>总 token/s</span><strong>'+format(m.input+m.output)+'</strong></div></details>')+'<p class="cp-help">按请求完成时统计最近 '+windowName()+' 的平均吞吐，包含本机不同账号与会话。此数值不代表单次请求的流式生成速度。</p>';
+      }
+      function settingsHTML() {
+        const autoRows=state.accounts.map(a=>'<div class="cp-setting"><label><span>'+escape(a.name)+'<small>'+escape(a.email)+'</small></span><input type="checkbox" data-auto="'+a.id+'" '+(state.auto.has(a.id)?'checked':'')+' aria-label="'+escape(a.name)+' 自动刷新额度"></label></div>').join('');
+        return '<div class="cp-setting"><label>登录时启动<input type="checkbox" id="cp-launch-login" '+(state.startLogin?'checked':'')+'></label></div><div class="cp-setting"><label><span>状态栏显示 TPS<small>显示当前所选模型的输出吞吐</small></span><input type="checkbox" id="cp-show-tps" '+(prefs.showTPS?'checked':'')+'></label></div><div class="cp-setting"><label>外观'+selectMarkup(prefs.appearance,'id="cp-appearance" aria-label="外观"',[['跟随系统','跟随系统'],['浅色','浅色'],['深色','深色']])+'</label></div><div class="cp-page-label">吞吐统计</div><div class="cp-setting"><label>默认窗口'+selectMarkup(state.period,'data-setting-period aria-label="默认统计窗口"',periodOptions)+'</label></div><p class="cp-help">本地统计每 15 秒更新。等待请求完成后，新的用量才会进入统计。</p><div class="cp-page-label">账号额度自动刷新</div>'+autoRows+'<p class="cp-help">开启的账号每 5 分钟联网刷新额度。</p>';
+      }
+      function manageHTML() {
+        return state.accounts.map((a,index)=>'<div class="cp-manage-row" data-managed="'+a.id+'" draggable="true"><div class="cp-manage-identity"><span>'+escape(a.name)+'</span>'+(a.id===state.current?'<span class="cp-current" style="margin-left:7px">当前</span>':'')+'<small>'+escape(a.email)+'</small></div><button class="cp-icon-button cursor-interaction" data-move="'+a.id+'" data-direction="-1" aria-label="上移 '+escape(a.name)+'" '+(index===0?'disabled':'')+'>'+icon('chevron-up')+'</button><button class="cp-icon-button cursor-interaction" data-move="'+a.id+'" data-direction="1" aria-label="下移 '+escape(a.name)+'" '+(index===state.accounts.length-1?'disabled':'')+'>'+icon('chevron-down')+'</button><button class="cp-icon-button cp-danger cursor-interaction" data-delete="'+a.id+'" aria-label="删除 '+escape(a.name)+'" '+(a.id===state.current?'disabled':'')+'>'+icon('trash-2')+'</button></div>').join('')+'<p class="cp-help">拖动账号或使用箭头调整顺序。当前使用的账号需要先切换后才能删除。</p>';
+      }
+      function dialogHTML() {
+        if(!state.modal)return '';
+        const {type,id}=state.modal,a=state.accounts.find(item=>item.id===id);
+        let title='',text='',action='',mark='arrow-left-right';
+        if(type==='switch'&&a){title='切换到 '+escape(a.name)+'？';text=escape(a.email)+'<br><br>会退出并重新打开 Codex。正在进行的任务会中断。';action='退出并切换';}
+        else if(type==='delete'&&a){title='删除 '+escape(a.name)+'？';text=escape(a.email)+'<br><br>移除保存的登录。下次使用这个账号时，需要重新登录。';action='删除账号';mark='trash-2';}
+        else if(type==='add'){title='登录一个新账号';text='先保存当前登录，再退出 Codex 并打开登录界面。<br><br>登录完成后，回到状态栏点「保存登录」。';action='打开登录';mark='user-round-plus';}
+        return '<div class="cp-dialog-mark">'+icon(mark)+'</div><h3 id="cp-dialog-title">'+title+'</h3><p>'+text+'</p><div class="cp-dialog-buttons"><button class="cursor-interaction" data-modal-cancel>取消</button><button class="cursor-interaction '+(type==='delete'?'cp-delete-button':'cp-primary')+'" data-modal-confirm>'+action+'</button></div>';
+      }
+      function render() {
+        root.style.colorScheme=prefs.appearance==='浅色'?'light':prefs.appearance==='深色'?'dark':'light dark';
+        $('#cp-panel').hidden=!state.open;
+        $('#cp-trigger').setAttribute('aria-expanded',String(state.open));
+        $('#cp-bar-rate').hidden=!prefs.showTPS;
+        $('#cp-bar-rate').textContent=prefs.scenario==='统计读取失败'?'— t/s':format(metrics().output)+' t/s';
+        const main=state.page==='main';
+        $('#cp-main').hidden=!main;$('#cp-secondary').hidden=main;
+        $('#cp-header-mark').toggleAttribute('hidden',!main);$('#cp-back').hidden=main;$('#cp-settings').hidden=!main;
+        $('#cp-title').textContent=main?'Codex 切号':state.page==='stats'?'模型吞吐':state.page==='manage'?'管理账号':'设置';
+        const m=metrics();
+        $('#cp-output').textContent=format(m.output);$('#cp-requests').textContent=m.requests;$('#cp-sessions').textContent=m.sessions;
+        $('#cp-model').value=state.model;
+        root.querySelectorAll('[data-period]').forEach(button=>button.setAttribute('aria-pressed',String(Number(button.dataset.period)===state.period)));
+        $('#cp-readout').hidden=prefs.scenario==='统计读取失败';$('#cp-read-error').hidden=prefs.scenario!=='统计读取失败';
+        const notice=$('#cp-auth-notice');notice.hidden=!needsSave();
+        notice.innerHTML=icon('user-round')+'<span>'+(state.pending?'登录完成后，先保存新账号，再切换。':'当前登录尚未保存。先保存登录，再切换账号。')+'</span>';
+        const stale=prefs.scenario==='额度过期';$('#cp-quota-notice').hidden=!stale;
+        $('#cp-quota-notice').innerHTML=icon('clock-3')+'<span>额度已到重置时间，仍显示上次数据。</span><button class="cursor-interaction" data-action="refresh">刷新</button>';
+        $('#cp-accounts').innerHTML=accountsHTML();$('#cp-account-count').textContent=state.accounts.length;
+        $('#cp-quota-time').textContent=state.quotaUpdated?'刚刚更新':stale?'上次更新于昨天':'11:30 更新';
+        const enabled=state.accounts.filter(a=>state.auto.has(a.id));
+        $('#cp-auto-label').innerHTML=icon('clock-arrow-up')+(enabled.length===1?escape(enabled[0].name)+' 自动刷新':enabled.length?enabled.length+' 个自动刷新':'自动刷新已关闭');
+        $('#cp-refresh').disabled=state.quotaBusy;
+        $('#cp-refresh').innerHTML=icon(state.quotaBusy?'loader-circle':'refresh-cw').replace('<i ','<i class="'+(state.quotaBusy?'cp-busy-icon':'')+'" ');
+        $('#cp-save').classList.toggle('cp-save-needed',needsSave());
+        $('#cp-toast').hidden=!state.toast;$('#cp-toast').innerHTML=state.toast?icon('check')+escape(state.toast):'';
+        if(!main)$('#cp-secondary').innerHTML=state.page==='stats'?statsHTML():state.page==='manage'?manageHTML():settingsHTML();
+        $('#cp-modal').hidden=!state.modal;$('#cp-content').inert=Boolean(state.modal);
+        $('#cp-modal').innerHTML=dialogHTML();
+        icons();
+      }
+      function go(page) { state.page=page;state.toast='';render();remember();$('#cp-back').focus(); }
+      function openModal(type,id) { state.modal={type,id};render();$('#cp-modal [data-modal-cancel]').focus(); }
+      function closeModal() { const id=state.modal?.id;state.modal=null;render();if(id&&state.page==='main')$('[data-account="'+id+'"]').focus();else if(state.page!=='main')$('#cp-back').focus(); }
+      function refreshQuota() {
+        if(state.quotaBusy)return;
+        state.quotaBusy=true;state.toast='';render();
+        setTimeout(()=>{state.quotaBusy=false;state.quotaUpdated=true;if(prefs.scenario==='额度过期')prefs.scenario='正常';state.accounts.forEach(a=>{if(a.five===null){a.five=100;a.week=100;a.fiveReset='等待使用';a.weekReset='等待使用';}});state.toast='账号额度已刷新';render();remember();},650);
+      }
+      function moveAccount(id,direction) {
+        const from=state.accounts.findIndex(a=>a.id===id),to=from+direction;
+        if(from<0||to<0||to>=state.accounts.length)return;
+        const [item]=state.accounts.splice(from,1);state.accounts.splice(to,0,item);render();remember();
+        const button=$('[data-move="'+id+'"][data-direction="'+direction+'"]');if(button&&!button.disabled)button.focus();
+      }
+      root.addEventListener('click',event=>{
+        const button=event.target.closest('button');if(!button||button.disabled)return;
+        if(button.id==='cp-trigger'){state.open=!state.open;state.modal=null;if(state.open)state.page='main';render();remember();return;}
+        if(button.id==='cp-settings'){go('settings');return;}
+        if(button.id==='cp-back'){state.page='main';render();remember();$('#cp-settings').focus();return;}
+        if(button.id==='cp-refresh'||button.dataset.action==='refresh'){refreshQuota();return;}
+        if(button.dataset.account){if(!needsSave()&&button.dataset.account!==state.current)openModal('switch',button.dataset.account);return;}
+        if(button.dataset.page){go(button.dataset.page);return;}
+        if(button.dataset.period){state.period=Number(button.dataset.period);render();remember();$('[data-period="'+state.period+'"]').focus();return;}
+        if(button.hasAttribute('data-modal-cancel')){closeModal();return;}
+        if(button.hasAttribute('data-modal-confirm')){
+          const modal=state.modal;if(!modal)return;
+          state.modal=null;
+          if(modal.type==='switch'){state.current=modal.id;state.toast='已切换到 '+state.accounts.find(a=>a.id===modal.id).name;}
+          else if(modal.type==='delete'){state.accounts=state.accounts.filter(a=>a.id!==modal.id);state.auto.delete(modal.id);}
+          else if(modal.type==='add'){state.pending=true;state.page='main';}
+          render();remember();if(state.page==='main')$('#cp-save').focus();else $('#cp-back').focus();return;
+        }
+        if(button.dataset.move){moveAccount(button.dataset.move,Number(button.dataset.direction));return;}
+        if(button.dataset.delete){if(button.dataset.delete!==state.current)openModal('delete',button.dataset.delete);return;}
+        if(button.dataset.action==='save'){
+          if(needsSave()){const id='new'+(++state.newIndex);state.accounts.push({id,name:'Plus',email:'new•••@gmail.com',five:null,week:null,fiveReset:'',weekReset:''});state.current=id;state.pending=false;if(prefs.scenario==='当前登录未保存')prefs.scenario='正常';}
+          state.toast='当前登录已保存';render();remember();$('#cp-save').focus();return;
+        }
+        if(button.dataset.action==='add'){if(!needsSave())openModal('add');else{state.toast='先保存当前登录，再添加账号';render();}return;}
+        if(button.dataset.action==='retry-stats'){prefs.scenario='正常';render();remember();return;}
+        if(button.dataset.action==='quit'){state.open=false;render();remember();$('#cp-trigger').focus();}
+      });
+      root.addEventListener('change',event=>{
+        const input=event.target;
+        if(input.id==='cp-model'||input.hasAttribute('data-stat-model'))state.model=input.value;
+        else if(input.hasAttribute('data-stat-period')||input.hasAttribute('data-setting-period'))state.period=Number(input.value);
+        else if(input.id==='cp-show-tps')prefs.showTPS=input.checked;
+        else if(input.id==='cp-launch-login')state.startLogin=input.checked;
+        else if(input.id==='cp-appearance')prefs.appearance=input.value;
+        else if(input.dataset.auto){input.checked?state.auto.add(input.dataset.auto):state.auto.delete(input.dataset.auto);}
+        const identifier=input.id,auto=input.dataset.auto;
+        const field=['data-stat-model','data-stat-period','data-setting-period'].find(attribute=>input.hasAttribute(attribute));
+        render();remember();if(identifier)$('#'+identifier)?.focus();else if(auto)$('[data-auto="'+auto+'"]').focus();else if(field)$('['+field+']').focus();
+      });
+      root.addEventListener('keydown',event=>{
+        if(event.key==='Escape'){if(state.modal)closeModal();else if(state.page!=='main'){state.page='main';render();$('#cp-settings').focus();}else{state.open=false;render();$('#cp-trigger').focus();}remember();return;}
+        if(state.modal&&event.key==='Tab'){
+          const controls=$('#cp-modal').querySelectorAll('button');
+          if(event.shiftKey&&document.activeElement===controls[0]){event.preventDefault();controls[controls.length-1].focus();}
+          else if(!event.shiftKey&&document.activeElement===controls[controls.length-1]){event.preventDefault();controls[0].focus();}
+        }
+      });
+      root.addEventListener('dragstart',event=>{const row=event.target.closest('[data-managed]');if(row){state.dragID=row.dataset.managed;if(event.dataTransfer){event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',state.dragID);}}});
+      root.addEventListener('dragover',event=>{if(event.target.closest('[data-managed]'))event.preventDefault();});
+      root.addEventListener('drop',event=>{const row=event.target.closest('[data-managed]');if(!row||!state.dragID)return;event.preventDefault();const from=state.accounts.findIndex(a=>a.id===state.dragID),to=state.accounts.findIndex(a=>a.id===row.dataset.managed);if(from>=0&&to>=0&&from!==to){const [a]=state.accounts.splice(from,1);state.accounts.splice(to,0,a);render();remember();}state.dragID=null;});
+      applySaved(window.openai&&window.openai.widgetState);render();
+      window.addEventListener('openai:set_globals',event=>{const saved=event.detail?.globals?.widgetState;if(saved){applySaved(saved);render();}});
+      if(globalThis.Tweak){const tweak=new Tweak({container:root,onChange:()=>{state.modal=null;state.page='main';state.open=true;render();remember();}});tweak.addSelect(prefs,'appearance',{label:'外观',options:['跟随系统','浅色','深色']});tweak.addToggle(prefs,'showTPS',{label:'状态栏显示输出 TPS'});tweak.addSelect(prefs,'scenario',{label:'演示状态',options:['正常','额度过期','暂无完成请求','统计读取失败','当前登录未保存']});}
+    })();
+  </script>
+</div>

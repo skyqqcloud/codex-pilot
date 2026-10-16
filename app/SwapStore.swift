@@ -70,7 +70,7 @@ final class SwapStore: ObservableObject {
         capture?.onExit = { [weak self] in
             Task { @MainActor in self?.scheduleCollectorRestart() }
         }
-        Task { [weak self] in
+        Task(priority: .utility) { [weak self] in
             guard let self else { return }
             await self.refreshLocalState()
             self.startTimers()
@@ -132,7 +132,7 @@ final class SwapStore: ObservableObject {
             await throughputTask.value
             return
         }
-        let task = Task {
+        let task = Task(priority: .background) {
             var retry = retryUnresolved
             repeat {
                 self.refreshRequested = false
@@ -170,7 +170,7 @@ final class SwapStore: ObservableObject {
                     contextRetryAttempt = 0
                 }
                 let file = speedFile, home = codexHome, previous = requestPresentation
-                let presentation = try await Task.detached(priority: .utility) {
+                let presentation = try await Task.detached(priority: .background) {
                     let snapshot = try JSONDecoder().decode(RequestSpeedSnapshot.self, from: Data(contentsOf: file))
                     let prior = Dictionary(previous.speeds.samples.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
                     let changedIDs = Set(snapshot.samples.filter { original in
@@ -246,7 +246,7 @@ final class SwapStore: ObservableObject {
         let delay = [2, 10, 60][contextRetryAttempt]
         let expectedStamp = sampleStamp
         contextRetryAttempt += 1
-        contextRetryTask = Task { [weak self] in
+        contextRetryTask = Task(priority: .background) { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
             guard !Task.isCancelled, let self else { return }
             self.contextRetryTask = nil
@@ -262,7 +262,7 @@ final class SwapStore: ObservableObject {
         guard collectorRestartTask == nil, collectorRestartAttempt < 3 else { return }
         let delay = [2, 10, 60][collectorRestartAttempt]
         collectorRestartAttempt += 1
-        collectorRestartTask = Task { [weak self] in
+        collectorRestartTask = Task(priority: .background) { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
             guard !Task.isCancelled, let self else { return }
             self.collectorRestartTask = nil
@@ -272,7 +272,7 @@ final class SwapStore: ObservableObject {
 
     func setCaptureEnabled(_ enabled: Bool) async {
         do {
-            captureEnabled = try await Task.detached { try TelemetryCapture.configure(enabled ? "enable" : "disable") }.value
+            captureEnabled = try await Task.detached(priority: .userInitiated) { try TelemetryCapture.configure(enabled ? "enable" : "disable") }.value
             captureError = nil
             notify("测速设置已更新，重启 Codex 后生效")
         } catch { captureError = error.localizedDescription }
@@ -297,7 +297,7 @@ final class SwapStore: ObservableObject {
 
     private func reload() async {
         do {
-            let state = try await Task.detached { try CodexSwap.list() }.value
+            let state = try await Task.detached(priority: .utility) { try CodexSwap.list() }.value
             current = state.current
             livePlan = state.livePlan
             liveEmail = state.liveEmail
@@ -317,7 +317,7 @@ final class SwapStore: ObservableObject {
         if !silent { errorMessage = nil; status = "正在刷新额度…" }
         defer { busy = false; refreshingNames.removeAll() }
         do {
-            let batch = try await Task.detached { try CodexSwap.quotas(names: names) }.value
+            let batch = try await Task.detached(priority: silent ? .utility : .userInitiated) { try CodexSwap.quotas(names: names) }.value
             for index in slots.indices {
                 if let quota = batch.quotas[slots[index].name] { slots[index] = slots[index].withQuota(quota) }
             }
@@ -339,13 +339,13 @@ final class SwapStore: ObservableObject {
         if fileObserver == nil, capture != nil {
             do {
                 fileObserver = try TelemetryFileObserver(file: speedFile) { [weak self] in
-                    Task { @MainActor in await self?.refreshThroughput() }
+                    Task(priority: .background) { @MainActor in await self?.refreshThroughput() }
                 }
             } catch { captureError = error.localizedDescription }
         }
         guard quotaTimer == nil, !autoRefresh.isEmpty else { return }
         quotaTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in await self?.autoTick() }
+            Task(priority: .utility) { @MainActor in await self?.autoTick() }
         }
         quotaTimer?.tolerance = 10
     }
@@ -388,21 +388,21 @@ final class SwapStore: ObservableObject {
         errorMessage = nil
         status = "正在退出 Codex…"
         defer { busy = false }
-        guard await Task.detached(operation: { DesktopClient.quit() }).value else {
+        guard await Task.detached(priority: .userInitiated, operation: { DesktopClient.quit() }).value else {
             errorMessage = "Codex 尚未退出，切换已取消。请先退出 Codex 再重试。"
             status = ""
             return
         }
         do {
-            try await Task.detached { try CodexSwap.switchTo(row.name) }.value
+            try await Task.detached(priority: .userInitiated) { try CodexSwap.switchTo(row.name) }.value
             await reload()
-            let opened = await Task.detached { DesktopClient.open() }.value
+            let opened = await Task.detached(priority: .userInitiated) { DesktopClient.open() }.value
             notify("已切换到 \(row.planTitle)")
             if !opened { errorMessage = "登录已切换，请手动打开 Codex。" }
         } catch {
             errorMessage = error.localizedDescription
             status = ""
-            _ = await Task.detached { DesktopClient.open() }.value
+            _ = await Task.detached(priority: .userInitiated) { DesktopClient.open() }.value
         }
     }
 
@@ -414,7 +414,7 @@ final class SwapStore: ObservableObject {
         // An untagged login must not overwrite the previously saved account.
         let name = pendingSaveAfterAdd ?? (warning != nil || current.isEmpty ? unusedInternalName() : current)
         do {
-            try await Task.detached { try CodexSwap.save(name) }.value
+            try await Task.detached(priority: .userInitiated) { try CodexSwap.save(name) }.value
             setPending(nil)
             await reload()
             notify("当前登录已保存")
@@ -427,22 +427,22 @@ final class SwapStore: ObservableObject {
         errorMessage = nil
         status = "正在退出 Codex…"
         defer { busy = false }
-        guard await Task.detached(operation: { DesktopClient.quit() }).value else {
+        guard await Task.detached(priority: .userInitiated, operation: { DesktopClient.quit() }).value else {
             errorMessage = "Codex 尚未退出，添加账号已取消。"
             status = ""
             return
         }
         let name = unusedInternalName()
         do {
-            try await Task.detached { try CodexSwap.add(name) }.value
+            try await Task.detached(priority: .userInitiated) { try CodexSwap.add(name) }.value
             setPending(name)
             await reload()
-            if await Task.detached(operation: { DesktopClient.open() }).value { status = "" }
+            if await Task.detached(priority: .userInitiated, operation: { DesktopClient.open() }).value { status = "" }
             else { errorMessage = "请手动打开 Codex 登录，然后保存登录。" }
         } catch {
             errorMessage = error.localizedDescription
             status = ""
-            _ = await Task.detached { DesktopClient.open() }.value
+            _ = await Task.detached(priority: .userInitiated) { DesktopClient.open() }.value
         }
     }
 
@@ -452,25 +452,25 @@ final class SwapStore: ObservableObject {
         busy = true
         errorMessage = nil
         defer { busy = false }
-        guard await Task.detached(operation: { DesktopClient.quit() }).value else {
+        guard await Task.detached(priority: .userInitiated, operation: { DesktopClient.quit() }).value else {
             errorMessage = "Codex 尚未退出，请先退出再返回原账号。"; return
         }
         do {
             // Retain any newly completed login before restoring the original account.
-            let fresh = try await Task.detached { try CodexSwap.list() }.value
+            let fresh = try await Task.detached(priority: .userInitiated) { try CodexSwap.list() }.value
             if fresh.authExists {
                 let newSlot = pendingSaveAfterAdd ?? unusedInternalName()
-                try await Task.detached { try CodexSwap.save(newSlot) }.value
+                try await Task.detached(priority: .userInitiated) { try CodexSwap.save(newSlot) }.value
             }
-            try await Task.detached { try CodexSwap.switchTo(previous) }.value
+            try await Task.detached(priority: .userInitiated) { try CodexSwap.switchTo(previous) }.value
             setPending(nil)
             await reload()
-            let opened = await Task.detached { DesktopClient.open() }.value
+            let opened = await Task.detached(priority: .userInitiated) { DesktopClient.open() }.value
             notify("已返回原账号")
             if !opened { errorMessage = "请手动打开 Codex。" }
         } catch {
             errorMessage = error.localizedDescription
-            _ = await Task.detached { DesktopClient.open() }.value
+            _ = await Task.detached(priority: .userInitiated) { DesktopClient.open() }.value
         }
     }
 
@@ -480,7 +480,7 @@ final class SwapStore: ObservableObject {
         errorMessage = nil
         defer { busy = false }
         do {
-            try await Task.detached { try CodexSwap.delete(row.name) }.value
+            try await Task.detached(priority: .userInitiated) { try CodexSwap.delete(row.name) }.value
             autoRefresh.remove(row.name)
             defaults.set(Array(autoRefresh).sorted(), forKey: "AutoRefreshSlots")
             await reload()
@@ -508,13 +508,13 @@ final class SwapStore: ObservableObject {
         errorMessage = nil
         defer { busy = false }
         do {
-            try await Task.detached { try CodexSwap.order(names) }.value
+            try await Task.detached(priority: .userInitiated) { try CodexSwap.order(names) }.value
             await reload()
             notify("账号顺序已保存")
         } catch { errorMessage = error.localizedDescription }
     }
 
-    func openCodex() async { _ = await Task.detached { DesktopClient.open() }.value }
+    func openCodex() async { _ = await Task.detached(priority: .userInitiated) { DesktopClient.open() }.value }
     private func setPending(_ name: String?) { pendingSaveAfterAdd = name; defaults.set(name, forKey: "PendingSaveAfterAdd") }
     private func unusedInternalName() -> String {
         let used = Set(slots.map(\.name)); var index = 1

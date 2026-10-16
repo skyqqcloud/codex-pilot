@@ -231,6 +231,7 @@ enum CodexSwap {
             throw SwapError.failed("找不到 Python 3。请安装 Command Line Tools（终端运行 xcode-select --install）或 Homebrew Python。")
         }
         let p = Process()
+        p.qualityOfService = WorkPriority.processQualityOfService
         p.executableURL = python
         p.arguments = [tool.path] + args
         let out = Pipe()

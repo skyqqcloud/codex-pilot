@@ -30,6 +30,7 @@ print(json.dumps(dict(ok=True,current='a',auth_exists=True,live=dict(plan='proli
 ''')
 (app / 'Contents/Resources/layout-slot-state.json').unlink(missing_ok=True)
 (app / 'Contents/Resources/request-context.py').write_bytes((Path.cwd() / 'backend/request-context.py').read_bytes())
+(app / 'Contents/Resources/tps-capture.py').write_bytes((Path.cwd() / 'backend/tps-capture.py').read_bytes())
 sessions = root / 'fixtures/sessions'; sessions.mkdir(parents=True, exist_ok=True)
 now = datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00', 'Z')
 lines = [dict(timestamp=now, type='session_meta', payload=dict(id='mock'))]

@@ -12,6 +12,7 @@ import urllib.request
 import urllib.error
 from unittest import mock
 import select
+from concurrent.futures import ThreadPoolExecutor
 
 spec = importlib.util.spec_from_file_location('capture', Path(__file__).parents[1]/'backend/tps-capture.py')
 capture = importlib.util.module_from_spec(spec)
@@ -312,6 +313,55 @@ class CaptureTests(unittest.TestCase):
             self.assertNotIn('PRIVATE',(self.root/'telemetry/samples.json').read_text())
         finally:
             proc.terminate();proc.wait(timeout=3)
+
+    @unittest.skipUnless(hasattr(select,'kqueue'),'macOS parent-exit notification')
+    def test_background_receiver_preserves_concurrent_burst(self):
+        with socket.socket() as s:
+            s.bind(('127.0.0.1',0));port=s.getsockname()[1]
+        # The real receiver runs at background QoS; synthetic traffic never
+        # uses the installed collector, real credentials or a model API.
+        bootstrap=("import ctypes,runpy,sys;lib=ctypes.CDLL('/usr/lib/libSystem.B.dylib');"
+                   "assert lib.pthread_set_qos_class_self_np(9,0)==0;"
+                   "assert lib.qos_class_self()==9;sys.argv=sys.argv[1:];"
+                   "runpy.run_path(sys.argv[0],run_name='__main__')")
+        proc=subprocess.Popen([sys.executable,'-c',bootstrap,
+            str(Path(__file__).parents[1]/'backend/tps-capture.py'),
+            'serve','--data',str(self.root),'--home',str(self.root/'home'),
+            '--parent',str(os.getpid()),'--port',str(port)],stderr=subprocess.PIPE)
+        try:
+            for _ in range(300):
+                if proc.poll() is not None:self.fail('background receiver exited before accepting traffic')
+                try:
+                    with socket.create_connection(('127.0.0.1',port),timeout=.1):break
+                except OSError:time.sleep(.01)
+            else:self.fail('background receiver did not listen')
+            token=(self.root/'tps-token').read_text()
+            def send_batch(index):
+                records=[]
+                for offset in range(4):
+                    number=index*4+offset
+                    fields=dict(model='model-'+str(number%2),conversation='burst-'+str(number))
+                    records += [record(0,'response.created',**fields),
+                        record(1,'response.output_item.added',**fields),
+                        record(3,'response.completed',output_token_count=200,input_token_count=500,
+                               reasoning_token_count=50,cached_token_count=100,ttft_ms=1000,**fields)]
+                request=urllib.request.Request(f'http://127.0.0.1:{port}/v1/logs',
+                    data=json.dumps(batch(*records)).encode(),
+                    headers={'x-codex-pilot-token':token,'Content-Type':'application/json'})
+                with urllib.request.urlopen(request,timeout=5) as response:
+                    self.assertEqual(response.status,200)
+            with ThreadPoolExecutor(max_workers=4) as pool:list(pool.map(send_batch,range(40)))
+            samples=capture.load_samples(self.root/'telemetry/samples.json')
+            self.assertEqual(len(samples),160)
+            self.assertEqual(len({s['id'] for s in samples}),160)
+            self.assertEqual({s['conversationID'] for s in samples},{'burst-'+str(i) for i in range(160)})
+            for sample in samples:
+                self.assertEqual((sample['outputTokens'],sample['inputTokens'],sample['reasoningTokens'],
+                                  sample['cachedTokens'],sample['durationSeconds'],sample['ttftSeconds']),
+                                 (200,500,50,100,2,1))
+        finally:
+            if proc.poll() is None:proc.terminate()
+            proc.wait(timeout=3);proc.stderr.close()
 
     @unittest.skipUnless(hasattr(select,'kqueue'),'macOS parent-exit notification')
     def test_idle_receiver_exits_promptly_when_parent_exits(self):

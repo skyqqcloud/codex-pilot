@@ -79,6 +79,7 @@ struct ScrollLayoutCheck {
                      "reopening re-read all contexts instead of using the prepared history")
         try await checkHistoryPreparation(store: store, base: base)
         try await checkEnergyObserver(base: base)
+        try await checkProcessPriorities(store: store, base: base)
         precondition(PanelFormat.tokens(109114) == "109,114", "token counts are not grouped")
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
@@ -467,6 +468,61 @@ struct ScrollLayoutCheck {
         precondition(count.value == 1, "busy traffic bypassed the active refresh budget")
         withExtendedLifetime(observer) {}
         print("Energy: unchanged refresh launches no readers; atomic file events are observed and busy writes are coalesced.")
+    }
+
+    static func checkProcessPriorities(store: SwapStore, base: URL) async throws {
+        let resources = Bundle.main.resourceURL!
+        let contextTool = resources.appendingPathComponent("request-context.py")
+        let accountTool = resources.appendingPathComponent("codex-swap.py")
+        let captureTool = resources.appendingPathComponent("tps-capture.py")
+        let report = resources.appendingPathComponent("priority-report.json")
+        let originals = try [contextTool, accountTool, captureTool].map { url in
+            FileManager.default.fileExists(atPath: url.path) ? try Data(contentsOf: url) : nil
+        }
+        defer {
+            for (url, original) in zip([contextTool, accountTool, captureTool], originals) {
+                if let original { try? original.write(to: url) }
+                else { try? FileManager.default.removeItem(at: url) }
+            }
+            try? FileManager.default.removeItem(at: report)
+        }
+        let probe = "import ctypes,json,sys\nqos=ctypes.CDLL('/usr/lib/libSystem.B.dylib').qos_class_self()\n"
+        try Data((probe + "calls=json.load(sys.stdin)\nprint(json.dumps({s['id']:dict(outputPreview=str(qos)) for s in calls}))\n").utf8).write(to: contextTool)
+        try Data((probe + "print(json.dumps(dict(ok=True,live=dict(plan=str(qos)),slots=[])))\n").utf8).write(to: accountTool)
+        try Data((probe + "from pathlib import Path\nimport time\nPath(__file__).with_name('priority-report.json').write_text(json.dumps(qos))\nif 'serve' in sys.argv: time.sleep(30)\nelse: print(json.dumps(dict(ok=True,enabled=True)))\n").utf8).write(to: captureTool)
+        let sample = store.latestSpeed!
+        for (priority, expected): (TaskPriority, UInt32) in [(.background, 9), (.utility, 17), (.userInitiated, 25)] {
+            let finished = FileEventCount()
+            // Poll completion instead of awaiting value: a high-priority waiter
+            // would intentionally promote the task under test.
+            let worker = Task.detached(priority: priority) {
+                defer { finished.increment() }
+                let context = try RequestMessageReader.contexts([sample], home: base)
+                let state = try CodexSwap.list()
+                let readerQoS = UInt32(context[sample.id]!.outputPreview!)!
+                let accountQoS = UInt32(state.livePlan)!
+                precondition(expected == 25 ? readerQoS >= expected && accountQoS >= expected :
+                             readerQoS == expected && accountQoS == expected,
+                             "child process ignored the caller's background/utility/interactive priority")
+            }
+            let deadline = Date().addingTimeInterval(10)
+            while finished.value == 0 && Date() < deadline { try await Task.sleep(nanoseconds: 20_000_000) }
+            precondition(finished.value == 1, "priority probe did not complete")
+            try await worker.value
+        }
+        let capture = TelemetryCapture()
+        try capture.start()
+        let deadline = Date().addingTimeInterval(5)
+        while !FileManager.default.fileExists(atPath: report.path) && Date() < deadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        let collectorQoS = try JSONDecoder().decode(UInt32.self, from: Data(contentsOf: report))
+        precondition(collectorQoS == 9, "resident collector was not launched with background QoS")
+        _ = try TelemetryCapture.configure("status")
+        let settingQoS = try JSONDecoder().decode(UInt32.self, from: Data(contentsOf: report))
+        precondition(settingQoS >= 25, "explicit user settings inherited background QoS")
+        withExtendedLifetime(capture) {}
+        print("QoS: real Python children honor background/utility/user priorities; collector is background and settings remain responsive.")
     }
 
     static func checkDisclosures(store: SwapStore, base: URL, groupID: String) async {

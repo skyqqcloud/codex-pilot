@@ -150,6 +150,7 @@ enum RequestMessageReader {
         guard !samples.isEmpty else { return Data() }
         guard let tool = Bundle.main.url(forResource: "request-context", withExtension: "py") else { throw SwapError.missingTool }
         let process = Process()
+        process.qualityOfService = WorkPriority.processQualityOfService
         process.executableURL = URL(fileURLWithPath: ["/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"]
             .first { FileManager.default.isExecutableFile(atPath: $0) } ?? "/usr/bin/python3")
         process.arguments = [tool.path, "--home", home.path] + arguments

@@ -15,7 +15,7 @@ struct TelemetryFileStamp: Equatable {
 }
 
 final class TelemetryFileObserver: @unchecked Sendable {
-    private let queue = DispatchQueue(label: "local.wmy.pilot.telemetry", qos: .utility)
+    private let queue = DispatchQueue(label: "local.wmy.pilot.telemetry", qos: .background)
     private let source: DispatchSourceFileSystemObject
     private var pending: DispatchWorkItem?
     private var lastDelivery = Date.distantPast

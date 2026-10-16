@@ -16,6 +16,7 @@ final class TelemetryCapture: @unchecked Sendable {
         guard process?.isRunning != true else { return }
         guard let tool = Bundle.main.url(forResource: "tps-capture", withExtension: "py") else { throw SwapError.missingTool }
         let p = Process()
+        p.qualityOfService = .background
         p.executableURL = Self.python
         p.arguments = [tool.path, "serve", "--parent", String(ProcessInfo.processInfo.processIdentifier)]
         p.standardOutput = FileHandle.nullDevice
@@ -37,6 +38,7 @@ final class TelemetryCapture: @unchecked Sendable {
     static func configure(_ command: String) throws -> Bool {
         guard let tool = Bundle.main.url(forResource: "tps-capture", withExtension: "py") else { throw SwapError.missingTool }
         let p = Process()
+        p.qualityOfService = .userInitiated
         p.executableURL = python
         p.arguments = [tool.path, command]
         let output = Pipe()

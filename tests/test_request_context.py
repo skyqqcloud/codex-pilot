@@ -7,6 +7,8 @@ import tempfile
 import unittest
 import sqlite3
 import tracemalloc
+import subprocess
+import sys
 spec=importlib.util.spec_from_file_location('context',Path(__file__).parents[1]/'backend/request-context.py')
 context=importlib.util.module_from_spec(spec);spec.loader.exec_module(context)
 ID='019f0000-1111-7000-8000-000000000001'
@@ -58,6 +60,106 @@ class ContextTests(unittest.TestCase):
   self.message(1020,'新的要求')
   self.assertEqual(resolver.preview(ID,1021),'新的要求')
   self.assertIsNone(resolver.preview('unknown',1021))
+ def test_context_index_warm_replay_reads_no_rollout_bytes(self):
+  self.message(1000,'要求');self.assistant(1004,'结果。后文')
+  resolver=context.RequestContext(self.home);samples=[self.sample('a',1001,1005)]
+  first=resolver.call_contexts(samples);cold=resolver.index.read_bytes
+  self.assertGreater(cold,0)
+  for _ in range(5):self.assertEqual(resolver.call_contexts(samples),first)
+  self.assertEqual(resolver.index.read_bytes,cold)
+  detail=resolver.call_contexts(samples,'a')['a']
+  self.assertEqual(detail['message'],'要求');self.assertEqual(detail['content'][0]['text'],'结果。后文')
+ def test_context_index_appends_and_retries_incomplete_utf8_line(self):
+  self.message(1000,'要求')
+  resolver=context.RequestContext(self.home);sample=self.sample('a',1001,1005)
+  before=resolver.call_contexts([sample]);self.assertNotIn('outputPreview',before['a'])
+  # The reader must not consume a half-written line, including a split UTF-8 character.
+  line=json.dumps(dict(timestamp=datetime.datetime.fromtimestamp(1004,datetime.timezone.utc).isoformat(),
+   type='response_item',payload=dict(type='message',role='assistant',content=[dict(type='output_text',text='新结果')])) ,ensure_ascii=False).encode()+b'\n'
+  split=line.index('新'.encode())+1
+  with self.path.open('ab') as f:f.write(line[:split])
+  self.assertEqual(resolver.call_contexts([sample]),before)
+  with self.path.open('ab') as f:f.write(line[split:])
+  self.assertEqual(resolver.call_contexts([sample])['a']['outputPreview'],'新结果')
+  cold=resolver.index.read_bytes
+  self.assertEqual(resolver.call_contexts([sample])['a']['outputPreview'],'新结果')
+  self.assertEqual(resolver.index.read_bytes,cold)
+ def test_context_index_append_reads_only_suffix_and_small_guards(self):
+  self.message(1000,'要求')
+  with self.path.open('ab') as f:
+   f.write((json.dumps(dict(type='response_item',payload=dict(type='function_call_output',output='X'*8192)))+'\n').encode()*128)
+  resolver=context.RequestContext(self.home);sample=self.sample('a',1001,1005)
+  resolver.call_contexts([sample]);before=resolver.index.read_bytes
+  line=(json.dumps(dict(timestamp=datetime.datetime.fromtimestamp(1004,datetime.timezone.utc).isoformat(),
+   type='response_item',payload=dict(type='message',role='assistant',content=[dict(type='output_text',text='结果')])))+'\n').encode()
+  with self.path.open('ab') as f:f.write(line)
+  self.assertEqual(resolver.call_contexts([sample])['a']['outputPreview'],'结果')
+  self.assertLessEqual(resolver.index.read_bytes-before,len(line)+2048)
+ def test_context_index_handles_out_of_order_windows_and_new_overlap(self):
+  self.message(1000,'要求');self.assistant(1004,'早结果');self.assistant(1024,'晚结果')
+  resolver=context.RequestContext(self.home)
+  early=self.sample('early',1001,1005);late=self.sample('late',1021,1025)
+  self.assertEqual(resolver.call_contexts([late])['late']['outputPreview'],'晚结果')
+  self.assertEqual(resolver.call_contexts([early])['early']['outputPreview'],'早结果')
+  peer=self.sample('overlap',1003,1006)
+  info=resolver.call_contexts([early,peer],'early')
+  self.assertEqual(info['early']['content'],[]);self.assertNotIn('outputPreview',info['overlap'])
+ def test_context_index_invalidates_replacement_truncation_and_rewrites(self):
+  self.message(1000,'旧消息');self.assistant(1004,'旧结果')
+  samples=[self.sample('a',1001,1005)];resolver=context.RequestContext(self.home)
+  original=self.path.read_bytes();old=resolver.call_contexts(samples)
+  replacement=self.path.with_suffix('.replacement')
+  replacement.write_bytes(original.replace(json.dumps('旧')[1:-1].encode(), json.dumps('新')[1:-1].encode()))
+  replacement.replace(self.path)
+  new=resolver.call_contexts(samples,'a')['a']
+  self.assertEqual(new['message'],'新消息');self.assertEqual(new['content'][0]['text'],'新结果')
+  self.path.write_bytes(original)
+  self.assertEqual(resolver.call_contexts(samples),old)  # same size, same inode, new mtime
+  self.path.write_bytes(b'')
+  self.assertEqual(resolver.call_contexts(samples),{})
+  self.path.write_bytes(original)
+  self.assertEqual(resolver.call_contexts(samples),old)
+  # Rewriting the prefix while growing must not be mistaken for a plain append.
+  self.path.write_bytes(original.replace(json.dumps('旧')[1:-1].encode(), json.dumps('改')[1:-1].encode())+b'{}\n')
+  self.assertEqual(resolver.call_contexts(samples,'a')['a']['message'],'改消息')
+ def test_context_index_rejects_stale_full_text_offsets(self):
+  self.message(1000,'旧消息')
+  index=context.RolloutIndex();records=index.records(self.path);reference=records[0][2]['_ref']
+  self.path.write_bytes(self.path.read_bytes().replace(json.dumps('旧')[1:-1].encode(), json.dumps('新')[1:-1].encode()))
+  with self.assertRaises(OSError):index.full(reference)
+ def test_context_index_bounded_lru_and_archive_discovery(self):
+  self.message(1000,'要求');self.assistant(1004,'结果')
+  resolver=context.RequestContext(self.home);samples=[self.sample('a',1001,1005)]
+  expected=resolver.call_contexts(samples)
+  resolver.index.MAX_FACTS=1
+  self.assertEqual(resolver.call_contexts(samples,'a')['a']['message'],'要求')
+  # Force an index miss to exercise the budget (a warm hit itself adds no facts).
+  resolver.index.files.clear()
+  self.assertEqual(resolver.call_contexts(samples),expected)
+  self.assertEqual(len(resolver.index.files),0)
+  archive=self.home/'archived_sessions';archive.mkdir()
+  self.path.rename(archive/self.path.name)
+  self.assertEqual(resolver.call_contexts(samples),expected)
+ def test_worker_protocol_reuses_resolver_recovers_from_error_and_exits_on_eof(self):
+  self.message(1000,'要求');self.assistant(1004,'结果')
+  samples=[self.sample('a',1001,1005)]
+  process=subprocess.Popen([sys.executable,str(Path(context.__file__)),'--home',str(self.home),'--worker'],
+   stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+  try:
+   def query(request):
+    process.stdin.write(json.dumps(request)+'\n');process.stdin.flush()
+    return json.loads(process.stdout.readline())
+   first=query(dict(command='contexts',samples=samples))
+   self.assertEqual(query(dict(command='contexts',samples=samples)),first)
+   self.assertIn('error',query(dict(command='invalid',samples=[])))
+   self.assertEqual(query(dict(command='contexts',samples=samples)),first)
+   self.assertEqual(query(dict(command='timings',samples=samples)),dict(result={}))
+   self.assertEqual(query(dict(command='contexts',samples=samples,fullID='a'))['result']['a']['message'],'要求')
+   process.stdin.close();process.wait(timeout=5)
+   self.assertEqual(process.returncode,0)
+  finally:
+   if process.poll() is None:process.kill();process.wait()
+   process.stdout.close();process.stderr.close()
  def test_full_message_preserves_paragraphs_and_uses_request_start(self):
   resolver=self.fixture()
   full='帮我检查这个项目。后面的内容需要完整显示\n\n第二段：'+('完整文本'*100)

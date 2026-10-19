@@ -149,21 +149,113 @@ enum RequestMessageReader {
     private static func run(_ samples: [RequestSpeedSample], home: URL, arguments: [String]) throws -> Data {
         guard !samples.isEmpty else { return Data() }
         guard let tool = Bundle.main.url(forResource: "request-context", withExtension: "py") else { throw SwapError.missingTool }
+        return try ContextWorkerPool.run(samples, home: home, tool: tool, arguments: arguments)
+    }
+}
+
+// Separate lanes preserve the existing foreground/background QoS contract.
+// Each lane blocks on a pipe when idle; it has no polling or refresh timer.
+// Only the current Codex home is retained (at most three lazy workers).
+private enum ContextWorkerPool {
+    private static let lock = NSLock()
+    private static var scope = ""
+    private static var workers: [Int: ContextWorker] = [:]
+
+    static func run(_ samples: [RequestSpeedSample], home: URL, tool: URL, arguments: [String]) throws -> Data {
+        let quality = WorkPriority.processQualityOfService
+        let attributes = try FileManager.default.attributesOfItem(atPath: tool.path)
+        let modified = (attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let stamp = "\(home.path):\(tool.path):\(attributes[.systemFileNumber]!):\(attributes[.size]!):\(modified)"
+        lock.lock()
+        if scope != stamp { workers.removeAll(); scope = stamp }
+        let worker: ContextWorker
+        if let cached = workers[quality.rawValue] { worker = cached }
+        else {
+            worker = ContextWorker(home: home, tool: tool, quality: quality)
+            workers[quality.rawValue] = worker
+        }
+        lock.unlock()
+        return try worker.run(samples, arguments: arguments)
+    }
+}
+
+private final class ContextWorker {
+    private let lock = NSLock()
+    private let home: URL
+    private let tool: URL
+    private let quality: QualityOfService
+    private var process: Process?
+    private var input: FileHandle?
+    private var output: FileHandle?
+
+    init(home: URL, tool: URL, quality: QualityOfService) {
+        self.home = home; self.tool = tool; self.quality = quality
+    }
+    deinit { stop() }
+
+    private func stop() {
+        try? input?.close(); try? output?.close()
+        if let process, process.isRunning { process.terminate() }
+        process = nil; input = nil; output = nil
+    }
+
+    private func start() throws {
         let process = Process()
-        process.qualityOfService = WorkPriority.processQualityOfService
+        process.qualityOfService = quality
         process.executableURL = URL(fileURLWithPath: ["/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"]
             .first { FileManager.default.isExecutableFile(atPath: $0) } ?? "/usr/bin/python3")
-        process.arguments = [tool.path, "--home", home.path] + arguments
+        process.arguments = [tool.path, "--home", home.path, "--worker"]
         let output = Pipe(), input = Pipe()
         process.standardOutput = output
         process.standardInput = input
         process.standardError = FileHandle.nullDevice
         try process.run()
-        try input.fileHandleForWriting.write(contentsOf: JSONEncoder().encode(samples))
-        try input.fileHandleForWriting.close()
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else { throw SwapError.failed("无法读取本地对话记录") }
-        return data
+        self.process = process
+        self.input = input.fileHandleForWriting
+        self.output = output.fileHandleForReading
+    }
+
+    func run(_ samples: [RequestSpeedSample], arguments: [String]) throws -> Data {
+        lock.lock(); defer { lock.unlock() }
+        do {
+            if process?.isRunning != true { stop(); try start() }
+            let request = Request(command: arguments.contains("--output-timings") ? "timings" : "contexts",
+                samples: samples, fullID: arguments.firstIndex(of: "--full-id").map { arguments[$0 + 1] })
+            // Bound a failed child without an idle watchdog. Killing only this
+            // owned process unblocks pipe I/O; the next refresh starts fresh.
+            let ownedProcess = process!
+            let timeout = DispatchSource.makeTimerSource(queue: .global(qos: .background))
+            timeout.schedule(deadline: .now() + 30)
+            timeout.setEventHandler {
+                if ownedProcess.isRunning { kill(ownedProcess.processIdentifier, SIGKILL) }
+            }
+            timeout.resume()
+            defer { timeout.cancel() }
+            var encoded = try JSONEncoder().encode(request)
+            encoded.append(10)
+            try input!.write(contentsOf: encoded)
+            var response = Data()
+            while response.last != 10 {
+                let chunk = output!.availableData
+                guard !chunk.isEmpty, response.count + chunk.count <= 32 * 1024 * 1024 else {
+                    throw SwapError.failed("无法读取本地对话记录")
+                }
+                response.append(chunk)
+            }
+            let reply = try JSONSerialization.jsonObject(with: response) as? [String: Any]
+            guard let result = reply?["result"], reply?["error"] == nil else {
+                throw SwapError.failed("无法读取本地对话记录")
+            }
+            return try JSONSerialization.data(withJSONObject: result)
+        } catch {
+            stop()
+            throw error
+        }
+    }
+
+    private struct Request: Encodable {
+        let command: String
+        let samples: [RequestSpeedSample]
+        let fullID: String?
     }
 }

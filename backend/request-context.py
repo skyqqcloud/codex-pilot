@@ -1,5 +1,6 @@
 """Resolve local initiating messages; previews are bounded, full text is read on demand."""
 import datetime
+from collections import OrderedDict
 from contextlib import closing
 import hashlib
 import json
@@ -193,9 +194,140 @@ def output_timings(home, samples):
         return {}  # Missing/locked/older logs leave the timing explicitly unavailable.
     return result
 
+class RolloutIndex:
+    """Volatile, bounded association facts. No token counters or timing cache.
+
+    Full text stays in the rollout; offsets are used only after checking the
+    file identity. An idle worker blocks on stdin, without a refresh timer.
+    """
+    MAX_FILES = 96
+    MAX_FACTS = 24000
+
+    def __init__(self):
+        self.files = OrderedDict()
+        self.read_bytes = 0  # Diagnostic/test counter; never persisted.
+
+    @staticmethod
+    def stamp(stat):
+        return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+
+    @staticmethod
+    def decode(line):
+        header = RECORD_HEADER.match(line[:512])
+        if header:
+            root = header.group(1)
+            if root not in (b'response_item', b'event_msg', b'turn_context', b'compacted'): return None
+            if root == b'response_item' and re.match(
+                br'\s*"type"\s*:\s*"(?:reasoning|function_call_output|custom_tool_call_output)"\s*[,}]',
+                line[header.end():header.end()+128]): return None
+        if b'"image_url"' in line and b'data:image/' in line: line = without_image_data(line)
+        try:
+            item = json.loads(line)
+            when = datetime.datetime.fromisoformat(item['timestamp'].replace('Z', '+00:00')).timestamp()
+            kind, payload = item.get('type'), item.get('payload', {})
+            if isinstance(payload, dict): return when, kind, payload
+        except (ValueError, KeyError, TypeError): pass
+        return None
+
+    @staticmethod
+    def compact(kind, payload):
+        if kind == 'turn_context': return dict(turn_id=payload.get('turn_id'))
+        if kind == 'event_msg':
+            event = payload.get('type')
+            if event in ('task_started', 'task_complete'): return dict(type=event, turn_id=payload.get('turn_id'))
+            if event != 'user_message': return None
+            text = message_text(payload.get('message'))
+            if text: return dict(type=event, message=sentence(text) or text[:80], dedup=hashlib.sha256(text.encode()).hexdigest())
+        if kind == 'response_item':
+            role, output = payload.get('role'), payload.get('type')
+            if role == 'user':
+                text = message_text('\n'.join(x.get('text', '') for x in payload.get('content', []) if isinstance(x, dict)))
+                if text: return dict(role=role, content=[dict(text=sentence(text) or text[:80])], dedup=hashlib.sha256(text.encode()).hexdigest())
+            elif output == 'message' and role == 'assistant':
+                text = '\n'.join(x.get('text', '') for x in payload.get('content', [])
+                    if isinstance(x, dict) and x.get('type') in ('output_text', 'text'))
+                return dict(type=output, role=role, content=[dict(type='output_text', text=sentence(text) or text[:80])])
+            elif output in ('function_call', 'custom_tool_call'):
+                return dict(type=output, name=(payload.get('name') or '未记录名称')[:256], arguments='')
+        if kind == 'compacted':
+            # Retain only the exact identity/counters checked by compaction_matches.
+            record = payload.get('latest_token_usage_record')
+            if not isinstance(record, dict): return None
+            usage = record.get('usage')
+            if not isinstance(usage, dict): return None
+            return dict(compaction_response_id=payload.get('compaction_response_id'), latest_token_usage_record={
+                **{k: record.get(k) for k in ('response_id', 'thread_id')},
+                'usage': {k: usage.get(k) for k in ('input_tokens', 'output_tokens', 'reasoning_output_tokens', 'cached_input_tokens')}})
+        return None
+
+    def records(self, path):
+        import os
+        with path.open('rb') as stream:
+            stat = os.fstat(stream.fileno())
+            stamp = self.stamp(stat)
+            state = self.files.pop(path, None)
+            if state and stamp == state['stamp']:
+                self.files[path] = state
+                return state['records']
+            # Rollouts are append-only. Replaced, shortened or rewritten files
+            # invalidate offsets. Check both ends of the indexed prefix as well.
+            reusable = state and stamp[:2] == state['stamp'][:2] and stamp[2] > state['stamp'][2]
+            if reusable:
+                for offset, expected in state['guards']:
+                    stream.seek(offset)
+                    actual = stream.read(len(expected)); self.read_bytes += len(actual)
+                    if actual != expected: reusable = False; break
+            if not reusable: state = dict(offset=0, records=[])
+            stream.seek(state['offset'])
+            while stream.tell() < stat.st_size:
+                offset = stream.tell()
+                line = stream.readline(); self.read_bytes += len(line)
+                if not line.endswith(b'\n') or stream.tell() > stat.st_size: break
+                state['offset'] = stream.tell()
+                decoded = self.decode(line)
+                if decoded is None: continue
+                when, kind, payload = decoded
+                kept = self.compact(kind, payload)
+                if kept is not None:
+                    # Only references and short text survive this iteration.
+                    kept['_ref'] = (path, stamp[:2], offset, hashlib.sha256(line).digest())
+                    state['records'].append((when, kind, kept))
+            after = self.stamp(os.fstat(stream.fileno()))
+            current = self.stamp(path.stat())
+            if (after != current or after[:2] != stamp[:2] or after[2] < stamp[2] or
+                (after[2] == stamp[2] and after != stamp)):
+                raise OSError('Rollout changed while indexing')
+            # If an append raced this read, remember the original size so that
+            # the next request reads its suffix rather than trusting a new stamp.
+            state['stamp'] = stamp
+            state['guards'] = []
+            for offset in dict.fromkeys((0, max(0, state['offset'] - 512))):
+                stream.seek(offset)
+                value = stream.read(min(512, state['offset'] - offset)); self.read_bytes += len(value)
+                state['guards'].append((offset, value))
+        self.files[path] = state
+        records = state['records']
+        while len(self.files) > self.MAX_FILES or sum(len(v['records']) for v in self.files.values()) > self.MAX_FACTS:
+            self.files.popitem(last=False)
+        return records
+
+    def full(self, reference):
+        import os
+        path, identity, offset, digest = reference
+        with path.open('rb') as stream:
+            if self.stamp(os.fstat(stream.fileno()))[:2] != identity: raise OSError('Replaced rollout')
+            stream.seek(offset)
+            line = stream.readline(); self.read_bytes += len(line)
+            if hashlib.sha256(line).digest() != digest: raise OSError('Changed rollout record')
+            decoded = self.decode(line)
+            if decoded is None: raise OSError('Missing rollout record')
+            return decoded[2]
+
+
 class RequestContext:
     def __init__(self,home):
-        self.home=Path(home);self.paths={};self.cache={};self.paths_refreshed=None;self.refresh_paths()
+        self.home=Path(home);self.paths={};self.cache={};self.paths_refreshed=None
+        self.index = RolloutIndex()
     def refresh_paths(self, force=False):
         now = time.monotonic()
         if not force and self.paths_refreshed is not None and now - self.paths_refreshed < 60: return
@@ -293,60 +425,16 @@ class RequestContext:
             full_end = full_call['completedAt'] + .15 if full_call else None
             for path in sorted(self.paths.get(conversation, [])):
                 try:
-                    with path.open('rb') as stream:
-                        for line in stream:
-                            if not line.endswith(b'\n'): continue
-                            header = RECORD_HEADER.match(line[:512])
-                            if header:
-                                root_kind = header.group(1)
-                                if root_kind not in (b'response_item', b'event_msg', b'turn_context', b'compacted'): continue
-                                if root_kind == b'response_item' and re.match(
-                                    br'\s*"type"\s*:\s*"(?:reasoning|function_call_output|custom_tool_call_output)"\s*[,}]',
-                                    line[header.end():header.end()+128]): continue
-                            if b'"image_url"' in line and b'data:image/' in line:
-                                line = without_image_data(line)
-                            try:
-                                item = json.loads(line)
-                                when = datetime.datetime.fromisoformat(item['timestamp'].replace('Z', '+00:00')).timestamp()
-                                kind, payload = item.get('type'), item.get('payload', {})
-                                if not isinstance(payload, dict) or when > high: continue
-                                # Keep only association facts. Images, tool results,
-                                # reasoning, world state and replacement history can
-                                # dwarf the text needed by this panel.
-                                kept = None
-                                if kind == 'turn_context':
-                                    kept = dict(turn_id=payload.get('turn_id'))
-                                elif kind == 'event_msg':
-                                    event = payload.get('type')
-                                    if event in ('task_started', 'task_complete'):
-                                        kept = dict(type=event, turn_id=payload.get('turn_id'))
-                                    elif event == 'user_message':
-                                        text = message_text(payload.get('message'))
-                                        if text:
-                                            kept = dict(type=event, message=text if full_id else (sentence(text) or text),
-                                                dedup=hashlib.sha256(text.encode()).hexdigest())
-                                elif kind == 'response_item':
-                                    role, output = payload.get('role'), payload.get('type')
-                                    if role == 'user':
-                                        text = message_text('\n'.join(x.get('text', '') for x in payload.get('content', []) if isinstance(x, dict)))
-                                        if text:
-                                            kept = dict(role=role, content=[dict(text=text if full_id else (sentence(text) or text))],
-                                                dedup=hashlib.sha256(text.encode()).hexdigest())
-                                    elif when >= low and output == 'message' and role == 'assistant':
-                                        text = '\n'.join(x.get('text', '') for x in payload.get('content', [])
-                                            if isinstance(x, dict) and x.get('type') in ('output_text', 'text'))
-                                        if full_start is None or not full_start <= when <= full_end:
-                                            text = sentence(text) or text
-                                        kept = dict(type=output, role=role, content=[dict(type='output_text', text=text)])
-                                    elif when >= low and output in ('function_call', 'custom_tool_call'):
-                                        kept = dict(type=output, name=payload.get('name'),
-                                            arguments=payload.get('arguments', payload.get('input', ''))
-                                                if full_start is not None and full_start <= when <= full_end else '')
-                                elif kind == 'compacted' and when >= low:
-                                    kept = {k:payload.get(k) for k in ('compaction_response_id', 'latest_token_usage_record')}
-                                if kept is not None: records.append((when, kind, kept))
-                            except (ValueError, KeyError, TypeError): continue
-                except OSError: continue
+                    for when, kind, payload in self.index.records(path):
+                        if when > high: continue
+                        if kind == 'compacted' or (kind == 'response_item' and payload.get('role') != 'user'):
+                            if when < low: continue
+                        kept = payload
+                        if (kind == 'response_item' and payload.get('role') != 'user' and
+                            full_start is not None and full_start <= when <= full_end):
+                            kept = self.index.full(payload['_ref'])
+                        records.append((when, kind, kept))
+                except FileNotFoundError: continue
             records.sort(key=lambda r: r[0])
             users, outputs, turns, ended, compactions = [], [], [], [], []
             turn = None
@@ -368,7 +456,7 @@ class RequestContext:
                     text, source = payload.get('message'), 'event'
                 full = message_text(text)
                 if full: users.append(dict(time=when, text=full, turn=turn, source=source,
-                                          dedup=payload.get('dedup') or hashlib.sha256(full.encode()).hexdigest()))
+                                          dedup=payload.get('dedup') or hashlib.sha256(full.encode()).hexdigest(), reference=payload.get('_ref')))
                 if kind != 'response_item': continue
                 if payload.get('type') == 'message' and payload.get('role') == 'assistant':
                     text = '\n'.join(x.get('text', '') for x in payload.get('content', [])
@@ -397,7 +485,11 @@ class RequestContext:
                     identity = '%s:%s:%.6f' % (conversation, user['turn'] or '', user['time'])
                     info.update(groupID=hashlib.sha256(identity.encode()).hexdigest(),
                                 groupPreview=sentence(user['text']), groupTimestamp=user['time'])
-                    if sample['id'] == full_id: info['message'] = user['text']
+                    if sample['id'] == full_id:
+                        payload = self.index.full(user['reference'])
+                        text = payload.get('message') if user['source'] == 'event' else '\n'.join(
+                            x.get('text', '') for x in payload.get('content', []) if isinstance(x, dict))
+                        info['message'] = message_text(text)
                 # Concurrent calls in one conversation cannot be assigned by time alone.
                 overlaps = any(other['id'] != sample['id'] and
                     other.get('startedAt', other['completedAt'] - other['durationSeconds'] - other.get('ttftSeconds', 0)) < end and
@@ -470,10 +562,33 @@ if __name__=='__main__':
     parser.add_argument('--home',default=os.environ.get('CODEX_HOME',str(Path.home()/'.codex')))
     parser.add_argument('--conversation')
     parser.add_argument('--before',type=float)
+    parser.add_argument('--worker',action='store_true')
     parser.add_argument('--samples',action='store_true')
     parser.add_argument('--output-timings',action='store_true')
     parser.add_argument('--full-id')
     args=parser.parse_args()
+    if args.worker:
+        import sys
+        resolver = RequestContext(args.home)
+        # One JSON line per request/reply. EOF on the parent-owned pipe ends the
+        # worker, including after a parent crash. There is no idle polling.
+        for line in sys.stdin:
+            try:
+                request = json.loads(line)
+                if request['command'] == 'contexts':
+                    result = resolver.call_contexts(request['samples'], request.get('fullID'))
+                elif request['command'] == 'timings':
+                    # Always query current typed events; history cache cannot
+                    # supply numeric timing evidence or conceal new overlaps.
+                    result = output_timings(args.home, request['samples'])
+                else: raise ValueError('Unknown command')
+                reply = dict(result=result)
+            except Exception:
+                # Do not publish partial associations or leak prompt text in errors.
+                resolver = RequestContext(args.home)
+                reply = dict(error='无法读取本地对话记录')
+            print(json.dumps(reply, ensure_ascii=False, allow_nan=False), flush=True)
+        raise SystemExit(0)
     if args.output_timings:
         import sys
         print(json.dumps(output_timings(args.home, json.load(sys.stdin)), allow_nan=False))

@@ -487,7 +487,7 @@ struct ScrollLayoutCheck {
             try? FileManager.default.removeItem(at: report)
         }
         let probe = "import ctypes,json,sys\nqos=ctypes.CDLL('/usr/lib/libSystem.B.dylib').qos_class_self()\n"
-        try Data((probe + "calls=json.load(sys.stdin)\nprint(json.dumps({s['id']:dict(outputPreview=str(qos)) for s in calls}))\n").utf8).write(to: contextTool)
+        try Data((probe + "import os\nfor line in sys.stdin:\n request=json.loads(line)\n print(json.dumps(dict(result={s['id']:dict(outputPreview=str(qos),groupPreview=str(os.getpid())) for s in request['samples']})),flush=True)\n").utf8).write(to: contextTool)
         try Data((probe + "print(json.dumps(dict(ok=True,live=dict(plan=str(qos)),slots=[])))\n").utf8).write(to: accountTool)
         try Data((probe + "from pathlib import Path\nimport time\nPath(__file__).with_name('priority-report.json').write_text(json.dumps(qos))\nif 'serve' in sys.argv: time.sleep(30)\nelse: print(json.dumps(dict(ok=True,enabled=True)))\n").utf8).write(to: captureTool)
         let sample = store.latestSpeed!
@@ -498,6 +498,14 @@ struct ScrollLayoutCheck {
             let worker = Task.detached(priority: priority) {
                 defer { finished.increment() }
                 let context = try RequestMessageReader.contexts([sample], home: base)
+                let again = try RequestMessageReader.contexts([sample], home: base)
+                precondition(again == context, "unchanged history launched a fresh worker")
+                let workerPID = Int32(context[sample.id]!.groupPreview!)!
+                kill(workerPID, SIGKILL)
+                try await Task.sleep(nanoseconds: 30_000_000)
+                let restarted = try RequestMessageReader.contexts([sample], home: base)
+                precondition(restarted[sample.id]!.groupPreview != context[sample.id]!.groupPreview,
+                             "history worker did not recover after unexpected exit")
                 let state = try CodexSwap.list()
                 let readerQoS = UInt32(context[sample.id]!.outputPreview!)!
                 let accountQoS = UInt32(state.livePlan)!

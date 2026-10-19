@@ -121,6 +121,13 @@ final class SwapStore: ObservableObject {
         return names.sorted()
     }
     var menuBarText: String { latestSpeed?.rate.map { String(format: "%.1f t/s", $0) } ?? "— t/s" }
+    var menuBarQuota: MenuBarQuota { MenuBarQuota(account: currentRow) }
+    var menuBarHelp: String {
+        let model = selectedModel.isEmpty ? "全部模型" : selectedModel
+        let speed = "最近一次输出（\(model)）：\(menuBarText)"
+        guard let row = currentRow else { return "Codex Pilot\n\(speed)\n未找到已保存的当前激活账号" }
+        return "Codex Pilot\n\(speed)\n当前账号：\(row.planTitle) · \(row.email)\n\(menuBarQuota.help)"
+    }
     var lastFetchedAt: Date? { slots.compactMap(\.fetchedAt).max().map(Date.init(timeIntervalSince1970:)) }
 
     func refreshThroughput(retryUnresolved: Bool = false) async {

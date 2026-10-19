@@ -25,11 +25,11 @@ struct SettingsPanel: View {
             Divider()
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("状态栏显示 TPS")
-                    Text("显示所选模型最近一次输出速度").font(.system(size: 11)).foregroundStyle(palette.secondary)
+                    Text("状态栏显示 TPS 和额度")
+                    Text("上排为输出速度，下排为当前账号剩余额度").font(.system(size: 11)).foregroundStyle(palette.secondary)
                 }
                 Spacer()
-                Toggle("状态栏显示 TPS", isOn: $store.showMenuBarTPS)
+                Toggle("状态栏显示 TPS 和额度", isOn: $store.showMenuBarTPS)
                     .labelsHidden().toggleStyle(.switch).controlSize(.small)
                     .panelControlHover(cornerRadius: 12)
                     .accessibilityIdentifier("show-menu-bar-tps")

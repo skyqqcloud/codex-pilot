@@ -199,6 +199,7 @@ struct ScrollLayoutCheck {
                      "reopening the panel did not retain the server-confirmed plan")
         print("Plan names: official prolite/pro/promax map to Pro 100/200/500; upgrades, downgrades, unknown and missing plans passed.")
         print("Plan refresh: manual update and reload keep Free / 30-day period; missing plan keeps last known plan.")
+        try await checkMenuBar(store: store, base: base)
         // Use the production main panel and three mock accounts, not estimated row heights.
         for scheme in [ColorScheme.light, .dark] {
             let view = NSHostingView(rootView: ContentView(store: store).environment(\.colorScheme, scheme))
@@ -544,6 +545,42 @@ struct ScrollLayoutCheck {
         precondition(settingQoS >= 25, "explicit user settings inherited background QoS")
         withExtendedLifetime(capture) {}
         print("QoS: real Python children honor background/utility/user priorities; collector is background and settings remain responsive.")
+    }
+
+    static func checkMenuBar(store: SwapStore, base: URL) async throws {
+        let cache = base.appendingPathComponent("Checker.app/Contents/Resources/layout-slot-state.json")
+        let original = try Data(contentsOf: cache)
+        defer { try? original.write(to: cache) }
+        let speed = store.menuBarText
+        func reload(_ overrides: [String: Any], expected: String) async throws {
+            try JSONSerialization.data(withJSONObject: overrides).write(to: cache)
+            await store.refreshLocalState()
+            precondition(store.menuBarQuota.text == expected, "menu bar selected the wrong account/quota")
+            precondition(store.menuBarText == speed, "quota refresh changed the selected model's TPS")
+        }
+        try await reload(["b": ["five": 1, "week": 2]], expected: "74%")
+        try await reload(["a": ["five": 40, "week": 82]], expected: "40%")
+        try await reload(["a": ["five": 82, "week": 40]], expected: "40%")
+        try await reload(["a": ["five": 0, "week": 82]], expected: "0%")
+        try await reload(["a": ["plan": "free", "five": 100, "week": NSNull(),
+                                "five_window_seconds": 2592000]], expected: "100%")
+        precondition(store.menuBarHelp.contains("30 天剩余 100%"), "Free quota tooltip used a five-hour period")
+        try await reload(["a": ["five": NSNull(), "week": NSNull()]], expected: "—")
+        try await reload(["a": ["active": false], "b": ["active": true]], expected: "63%")
+        precondition(store.menuBarHelp.contains("second@example.com"), "account switch retained the previous tooltip")
+        try await reload(["a": ["active": false]], expected: "—")
+        try original.write(to: cache)
+        await store.refreshLocalState()
+        for (index, values) in [("51.3 t/s", "82%"), ("— t/s", "—"), ("1024.8 t/s", "0%")].enumerated() {
+            let image = MenuBarMetrics.image(speed: values.0, quota: values.1)
+            precondition(image.isTemplate && image.size.height == 22, "menu bar image does not fit the native bar")
+            precondition(MenuBarMetrics.image(speed: values.0, quota: values.1) === image,
+                         "unrelated updates rebuilt an unchanged menu bar image")
+            let bitmap = NSBitmapImageRep(data: image.tiffRepresentation!)!
+            try bitmap.representation(using: .png, properties: [:])!
+                .write(to: base.appendingPathComponent("menu-bar-\(index).png"))
+        }
+        print("Menu bar: active-account switch, lower available quota, zero/unknown, Free 30-day period and unchanged TPS passed; 22pt template image cached.")
     }
 
     static func checkDisclosures(store: SwapStore, base: URL, groupID: String) async {

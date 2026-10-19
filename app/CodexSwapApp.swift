@@ -12,12 +12,14 @@ struct CodexSwapApp: App {
         } label: {
             Group {
                 if store.showMenuBarTPS {
-                    Text(store.menuBarText).monospacedDigit()
+                    Image(nsImage: MenuBarMetrics.image(speed: store.menuBarText, quota: store.menuBarQuota.text))
+                        .renderingMode(.template)
                 } else {
                     Image(systemName: "arrow.left.arrow.right")
                 }
             }
-            .accessibilityLabel("Codex Pilot")
+            .accessibilityLabel(store.showMenuBarTPS ? store.menuBarHelp : "Codex Pilot")
+            .help(store.showMenuBarTPS ? store.menuBarHelp : "Codex Pilot")
         }
         .menuBarExtraStyle(.window)
     }

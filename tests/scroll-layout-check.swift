@@ -174,7 +174,19 @@ struct ScrollLayoutCheck {
         precondition(store.detailSpeed == nil, "empty model displays another model's request")
         store.selectedModel = ""
         await store.refreshLocalState()
-        precondition(store.slots.first { $0.name == "b" }?.planTitle == "Pro", "plan refresh fixture did not start from a paid plan")
+        let paid = store.slots.first { $0.name == "b" }!
+        precondition(paid.planTitle == "Pro 200", "plan refresh fixture did not start from a paid plan")
+        let promoted = paid.withQuota(SlotQuota(five: nil, fiveWhen: "", fiveResetAt: nil,
+            week: nil, weekWhen: "", weekResetAt: nil, fetchedAt: nil, plan: "promax"))
+        let missing = promoted.withQuota(SlotQuota(five: nil, fiveWhen: "", fiveResetAt: nil,
+            week: nil, weekWhen: "", weekResetAt: nil, fetchedAt: nil))
+        precondition(missing.planTitle == "Pro 500", "missing plan changed a confirmed tier")
+        precondition(missing.withQuota(SlotQuota(five: nil, fiveWhen: "", fiveResetAt: nil,
+            week: nil, weekWhen: "", weekResetAt: nil, fetchedAt: nil, plan: "prolite")).planTitle == "Pro 100",
+            "server-confirmed downgrade retained the previous Pro tier")
+        precondition(paid.withQuota(SlotQuota(five: 100, fiveWhen: "", fiveResetAt: nil,
+            week: 100, weekWhen: "", weekResetAt: nil, fetchedAt: nil, plan: "future_pro")).planTitle == "future_pro",
+            "an unknown plan was guessed from its available quota")
         await store.refreshSlot("b")
         let free = store.slots.first { $0.name == "b" }!
         precondition(free.planTitle == "Free" && free.fiveWindowTitle == "30 天" && free.hasSingleFreeWindow,
@@ -185,6 +197,7 @@ struct ScrollLayoutCheck {
         await store.refreshLocalState()
         precondition(store.slots.first { $0.name == "b" }?.planTitle == "Free",
                      "reopening the panel did not retain the server-confirmed plan")
+        print("Plan names: official prolite/pro/promax map to Pro 100/200/500; upgrades, downgrades, unknown and missing plans passed.")
         print("Plan refresh: manual update and reload keep Free / 30-day period; missing plan keeps last known plan.")
         // Use the production main panel and three mock accounts, not estimated row heights.
         for scheme in [ColorScheme.light, .dark] {

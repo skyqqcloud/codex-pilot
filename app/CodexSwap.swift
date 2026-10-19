@@ -29,9 +29,12 @@ struct SlotRow: Identifiable, Hashable {
 
     var planTitle: String {
         switch plan.lowercased() {
-        case "prolite": return "Pro Lite"
+        // Canonical account types keep their old identifiers. These names
+        // match the official client's numbered tiers, not inferred quotas.
+        case "prolite": return "Pro 100"
         case "team": return "Team"
-        case "pro": return "Pro"
+        case "pro": return "Pro 200"
+        case "promax": return "Pro 500"
         case "plus": return "Plus"
         case "free": return "Free"
         default: return plan == "?" ? "未知套餐" : plan

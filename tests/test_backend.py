@@ -198,6 +198,22 @@ class BackendTests(unittest.TestCase):
         result=self.m.quota_data({"plan_type":"free"})
         self.assertEqual(result["plan"],"free")
 
+    def test_numbered_pro_tier_changes_survive_refresh_cache_and_missing_fields(self):
+        self.save("n1", "A")
+        before = self.m.AUTH.read_bytes()
+        # Same quota values for every tier: classification must use plan_type,
+        # including a new server-confirmed upgrade/downgrade over a stale token.
+        for plan in ("promax", "prolite", "pro", "free", "future_pro"):
+            self.m.fetch_usage = lambda data, plan=plan: (200, {"account_id": "A", "plan_type": plan,
+                "rate_limit": {"primary_window": {"used_percent": 20, "limit_window_seconds": 18000}}})
+            result = self.run_json(self.m.cmd_quota, "n1")
+            self.assertEqual(result["plan"], plan)
+            self.assertEqual(self.m.list_state()["slots"][0]["plan"], plan)
+            self.assertEqual(self.m.list_state()["live"]["plan"], plan)
+        self.m.fetch_usage = lambda data: (200, {"account_id": "A"})
+        self.assertEqual(self.run_json(self.m.cmd_quota, "n1")["plan"], "future_pro")
+        self.assertEqual(self.m.AUTH.read_bytes(), before)
+
     def test_active_token_rotation_updates_live_file_and_aliases_once(self):
         self.save("n1", "A", "live-access")
         self.write(self.m.slot_path("n1"), auth("A", "stale-access"))

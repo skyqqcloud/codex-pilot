@@ -22,8 +22,8 @@ Codex Pilot 是一个原生 macOS 菜单栏工具，集 **API 输出测速、多
 <table>
   <tr><th>账号与输出速度</th><th>请求分组与详情</th></tr>
   <tr>
-    <td valign="top"><img src="docs/images/main-light.png" width="340" alt="主面板：最近一次与五次平均 TPS，以及各账号剩余额度"></td>
-    <td valign="top"><img src="docs/images/request-detail-light.png" width="340" alt="详情面板：按发起消息分组的请求、独立 TPS 和双列用量详情"></td>
+    <td valign="top"><a href="docs/images/main-light@2x.png"><img src="docs/images/main-light@2x.png" width="340" alt="主面板：最近一次与五次平均 TPS，以及各账号剩余额度"></a></td>
+    <td valign="top"><a href="docs/images/request-detail-light@2x.png"><img src="docs/images/request-detail-light@2x.png" width="340" alt="详情面板：按发起消息分组的请求、独立 TPS 和双列用量详情"></a></td>
   </tr>
 </table>
 

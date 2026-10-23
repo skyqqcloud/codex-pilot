@@ -22,8 +22,8 @@ This is an independent community project, not affiliated with OpenAI. The curren
 <table>
   <tr><th>Accounts and output speed</th><th>Request groups and details</th></tr>
   <tr>
-    <td valign="top"><img src="docs/images/main-light.png" width="340" alt="Main panel showing latest and recent-five TPS alongside account quotas"></td>
-    <td valign="top"><img src="docs/images/request-detail-light.png" width="340" alt="Request details showing grouped calls, individual TPS and usage metrics"></td>
+    <td valign="top"><a href="docs/images/main-light@2x.png"><img src="docs/images/main-light@2x.png" width="340" alt="Main panel showing latest and recent-five TPS alongside account quotas"></a></td>
+    <td valign="top"><a href="docs/images/request-detail-light@2x.png"><img src="docs/images/request-detail-light@2x.png" width="340" alt="Request details showing grouped calls, individual TPS and usage metrics"></a></td>
   </tr>
 </table>
 

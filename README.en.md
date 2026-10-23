@@ -27,8 +27,6 @@ This is an independent community project, not affiliated with OpenAI. The curren
   </tr>
 </table>
 
-*Screenshots come from native offscreen tests with synthetic accounts, messages, and measurements. The displayed values are not performance benchmarks.*
-
 ## Features
 
 | Feature | What it shows |
@@ -177,7 +175,7 @@ Native checks require an available macOS WindowServer. `Package.swift` defines t
 
 [Issues](https://github.com/skyqqcloud/codex-pilot/issues) and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for development and regression requirements.
 
-Historical audits: [TPS accuracy](docs/tps-accuracy-audit-20261011.md) · [Resident energy use](docs/energy-audit-20261016.md) · [History read optimizations](docs/energy-audit-20261018.md) · [Plan mapping](docs/plan-names-20261019.md). These document specific versions and environments, not guaranteed long-term energy savings or live menu bar acceptance. Private source data and local backups are not published.
+Technical notes: [TPS accuracy](docs/tps-accuracy-audit-20261011.md) · [Resident energy use](docs/energy-audit-20261016.md) · [History read optimizations](docs/energy-audit-20261018.md) · [Plan mapping](docs/plan-names-20261019.md).
 
 ## License and acknowledgements
 

@@ -27,8 +27,6 @@ Codex Pilot 是一个原生 macOS 菜单栏工具，集 **API 输出测速、多
   </tr>
 </table>
 
-*截图来自原生离屏测试，账号、消息和测速样本均为演示数据。截图中的数值不代表实际性能。*
-
 ## 功能一览
 
 | 功能 | 你能看到什么 |
@@ -177,7 +175,7 @@ bash scripts/check.sh --live         # 额外只读检查本机记录；不要�
 
 欢迎提交 [Issue](https://github.com/skyqqcloud/codex-pilot/issues) 或 Pull Request。开发与回归要求见 [贡献指南](CONTRIBUTING.md)。
 
-历史审计：[TPS 准确性](docs/tps-accuracy-audit-20261011.md) · [常驻能耗](docs/energy-audit-20261016.md) · [历史读取优化](docs/energy-audit-20261018.md) · [套餐映射](docs/plan-names-20261019.md)。这些报告记录特定版本与环境的结果，不代表长期节电承诺或真实系统菜单栏验收；个人原始数据和本机备份不随仓库发布。
+技术记录：[TPS 准确性](docs/tps-accuracy-audit-20261011.md) · [常驻能耗](docs/energy-audit-20261016.md) · [历史读取优化](docs/energy-audit-20261018.md) · [套餐映射](docs/plan-names-20261019.md)。
 
 ## 许可证与致谢
 

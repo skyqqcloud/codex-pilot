@@ -14,9 +14,9 @@ struct MenuBarQuota {
 
     var text: String { windows.map(\.remaining).min().map { "\($0)%" } ?? "—" }
     var help: String {
-        guard !windows.isEmpty else { return "剩余额度：暂无数据" }
-        let detail = windows.map { "\($0.title)剩余 \($0.remaining)%" }.joined(separator: "，")
-        return windows.count > 1 ? detail + "（第二行显示较低值）" : detail
+        guard !windows.isEmpty else { return L10n.string("剩余额度：暂无数据") }
+        let detail = windows.map { L10n.string("\($0.title)剩余 \($0.remaining)%") }.joined(separator: L10n.string("，"))
+        return windows.count > 1 ? detail + L10n.string("（第二行显示较低值）") : detail
     }
 }
 

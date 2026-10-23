@@ -17,7 +17,9 @@
 
 Codex Pilot is a native macOS utility for **API output speed, account switching, and remaining quotas**. Built with SwiftUI and AppKit, it lives in the menu bar without a separate main window or Dock icon.
 
-This is an independent community project, not affiliated with OpenAI. The current app interface is in Chinese; this README provides an English getting-started guide.
+This is an independent community project, not affiliated with OpenAI.
+
+The app supports English and Simplified Chinese and follows your macOS language. To choose a language for Codex Pilot, go to **System Settings → General → Language & Region → Applications**, then reopen the app.
 
 <table>
   <tr><th>Accounts and output speed</th><th>Request groups and details</th></tr>
@@ -65,11 +67,11 @@ The app uses the first executable found in that order; ensure it is Python 3.9 o
 
 ## First use
 
-1. **Save your account:** sign in to Codex, open the Pilot panel, and choose **保存登录** (Save login).
-2. **Enable measurements:** in Settings, turn on **本机测速采集** (Local capture), then **restart Codex**. Measurements appear after new API calls complete.
-3. **Show menu bar values:** enable **状态栏显示 TPS 和额度** (Show TPS and quota) to replace the icon with two lines of values.
+1. **Save your account:** sign in to Codex, open the Pilot panel, and choose **Save login**.
+2. **Enable measurements:** in Settings, turn on **Local speed capture**, then **restart Codex**. Measurements appear after new API calls complete.
+3. **Show menu bar values:** enable **Show TPS and quota** to replace the icon with two lines of values.
 
-For another account, choose **添加账号** (Add account), follow the Codex sign-in flow, and save the new login. Reorder saved accounts under **管理账号** (Manage accounts).
+For another account, choose **Add account…**, follow the Codex sign-in flow, and save the new login. Reorder saved accounts under **Manage accounts**.
 
 **Switching accounts quits and reopens Codex; finish your current work first.** Pilot requests a normal quit before replacing the login file. If quitting fails or is cancelled, it keeps the original login.
 
@@ -110,12 +112,12 @@ It shows the active saved account's **remaining quota**. When several quota wind
 <details>
 <summary>Why are several API calls grouped under one user message?</summary>
 
-Codex may output text or call tools, then request the model again during a single task. Pilot groups these calls under the initiating message, with a separate TPS for each call. The message row represents the earliest captured call still retained in that group, labelled **本组首条** (First retained call in group). Expanding reveals later calls without repeating the user message.
+Codex may output text or call tools, then request the model again during a single task. Pilot groups these calls under the initiating message, with a separate TPS for each call. The message row represents the earliest captured call still retained in that group, labelled **First retained**. Expanding reveals later calls without repeating the user message.
 
 </details>
 
 <details>
-<summary>What does “未关联本地输出” (No associated local output) mean?</summary>
+<summary>What does “No associated local output” mean?</summary>
 
 API usage or timing was captured, but no output could be reliably matched in the local logs. This does not mean the conversation lacks a project or that the call failed. When evidence is missing, Pilot keeps the record without borrowing content from another request.
 

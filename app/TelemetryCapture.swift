@@ -48,7 +48,7 @@ final class TelemetryCapture: @unchecked Sendable {
         let data = output.fileHandleForReading.readDataToEndOfFile()
         p.waitUntilExit()
         guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw SwapError.badJSON }
-        guard result["ok"] as? Bool == true else { throw SwapError.failed(result["error"] as? String ?? "测速采集设置失败") }
+        guard result["ok"] as? Bool == true else { throw SwapError.failed(result["error"] as? String ?? L10n.string("测速采集设置失败")) }
         return result["enabled"] as? Bool ?? false
     }
 

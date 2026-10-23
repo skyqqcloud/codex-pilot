@@ -37,22 +37,22 @@ struct SlotRow: Identifiable, Hashable {
         case "promax": return "Pro 500"
         case "plus": return "Plus"
         case "free": return "Free"
-        default: return plan == "?" ? "未知套餐" : plan
+        default: return plan == "?" ? L10n.string("未知套餐") : plan
         }
     }
 
-    var fiveWindowTitle: String { Self.windowTitle(fiveWindowSeconds, fallback: "5 小时") }
-    var weekWindowTitle: String { Self.windowTitle(weekWindowSeconds, fallback: "7 天") }
+    var fiveWindowTitle: String { Self.windowTitle(fiveWindowSeconds, fallback: L10n.string("5 小时")) }
+    var weekWindowTitle: String { Self.windowTitle(weekWindowSeconds, fallback: L10n.string("7 天")) }
     var hasSingleFreeWindow: Bool {
         plan.lowercased() == "free" && five != nil && fiveWindowSeconds != nil &&
             week == nil && weekWindowSeconds == nil
     }
     private static func windowTitle(_ seconds: Int?, fallback: String) -> String {
         guard let seconds, seconds > 0 else { return fallback }
-        if seconds % 86400 == 0 { return "\(seconds / 86400) 天" }
-        if seconds % 3600 == 0 { return "\(seconds / 3600) 小时" }
-        if seconds % 60 == 0 { return "\(seconds / 60) 分钟" }
-        return "\(seconds) 秒"
+        if seconds % 86400 == 0 { return L10n.string("\(seconds / 86400) 天") }
+        if seconds % 3600 == 0 { return L10n.string("\(seconds / 3600) 小时") }
+        if seconds % 60 == 0 { return L10n.string("\(seconds / 60) 分钟") }
+        return L10n.string("\(seconds) 秒")
     }
 }
 
@@ -91,9 +91,9 @@ enum SwapError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingTool: return "App 内缺少 codex-swap 后端脚本"
-        case .badJSON: return "codex-swap 返回的不是 JSON"
-        case .failed(let s): return s
+        case .missingTool: return L10n.string("App 内缺少 codex-swap 后端脚本")
+        case .badJSON: return L10n.string("codex-swap 返回的不是 JSON")
+        case .failed(let s): return L10n.key(s)
         }
     }
 }
@@ -231,7 +231,7 @@ enum CodexSwap {
             throw SwapError.missingTool
         }
         guard let python = pythonURL() else {
-            throw SwapError.failed("找不到 Python 3。请安装 Command Line Tools（终端运行 xcode-select --install）或 Homebrew Python。")
+            throw SwapError.failed(L10n.string("找不到 Python 3。请安装 Command Line Tools（终端运行 xcode-select --install）或 Homebrew Python。"))
         }
         let p = Process()
         p.qualityOfService = WorkPriority.processQualityOfService
@@ -255,11 +255,11 @@ enum CodexSwap {
             p.terminate()
             Thread.sleep(forTimeInterval: 0.2)
             if p.isRunning { Darwin.kill(p.processIdentifier, SIGKILL) }
-            throw SwapError.failed("codex-swap 超时")
+            throw SwapError.failed(L10n.string("codex-swap 超时"))
         }
         p.waitUntilExit()
         guard finished.wait(timeout: .now() + 3) == .success else {
-            throw SwapError.failed("后台读取超时，请重试")
+            throw SwapError.failed(L10n.string("后台读取超时，请重试"))
         }
         let data = capture.get()
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {

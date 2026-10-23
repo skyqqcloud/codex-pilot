@@ -26,10 +26,10 @@ struct RequestGroupDisclosure: NSViewRepresentable {
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 9, weight: .semibold))
         button.isEnabled = enabled
         button.identifier = NSUserInterfaceItemIdentifier("request-group-\(groupID)")
-        let action = expanded ? "收起" : "展开"
-        button.toolTip = "\(action)关联的 \(callCount) 次 API 调用"
-        button.setAccessibilityLabel("\(action)关联调用")
-        button.setAccessibilityValue("\(callCount) 次调用，\(expanded ? "已展开" : "已折叠")")
+        let action = expanded ? L10n.string("收起") : L10n.string("展开")
+        button.toolTip = L10n.string("\(action)关联的 \(callCount) 次 API 调用")
+        button.setAccessibilityLabel(L10n.string("\(action)关联调用"))
+        button.setAccessibilityValue(L10n.string("\(callCount) 次调用，\(expanded ? L10n.string("已展开") : L10n.string("已折叠"))"))
     }
     final class Coordinator: NSObject {
         var toggle: () -> Void

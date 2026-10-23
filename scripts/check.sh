@@ -5,6 +5,7 @@ cd "$ROOT"
 /usr/bin/python3 -m unittest discover -s tests -p 'test_backend.py' -v
 /usr/bin/python3 -m unittest discover -s tests -p 'test_tps_capture.py' -v
 /usr/bin/python3 -m unittest discover -s tests -p 'test_request_context.py' -v
+/usr/bin/python3 -m unittest discover -s tests -p 'test_localization.py' -v
 CHECK_BUILD="$ROOT/.build/checks"
 mkdir -p "$CHECK_BUILD"
 SDK="$(xcrun --show-sdk-path)"

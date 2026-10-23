@@ -74,6 +74,7 @@ echo "==> 组装 .app"
 cp "$DIST/build/$BIN_NAME" "$APP/Contents/MacOS/$BIN_NAME"
 chmod +x "$APP/Contents/MacOS/$BIN_NAME"
 cp "$APP_SRC/Info.plist" "$APP/Contents/Info.plist"
+cp -R "$APP_SRC/Resources/"*.lproj "$APP/Contents/Resources/"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 cp "$ROOT/backend/codex-swap.py" "$APP/Contents/Resources/codex-swap.py"
 cp "$ROOT/backend/tps-capture.py" "$APP/Contents/Resources/tps-capture.py"
@@ -115,6 +116,18 @@ Codex Pilot — 安装说明
 
 切换账号前会确认；确认后退出并重新打开 Codex。
 本机吞吐来自本地用量记录，不发起模型请求。
+TXT
+cat > "$STAGE/Getting Started.txt" <<'TXT'
+Codex Pilot — Installation
+
+1. Drag Codex Pilot into Applications, then open it.
+2. If macOS blocks the first launch, allow it in System Settings → Privacy & Security.
+3. Requires Apple Silicon, macOS 14+, Python 3.9+, and a signed-in Codex desktop client.
+4. Click the menu bar icon and choose Save login to save your current account.
+5. Enable Local speed capture in Settings, then restart Codex to collect new calls.
+
+The interface follows your macOS language. You can choose English or Simplified
+Chinese for Codex Pilot in System Settings → General → Language & Region → Applications.
 TXT
 rm -f "$DMG"
 hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null

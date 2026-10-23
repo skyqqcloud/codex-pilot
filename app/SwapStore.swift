@@ -6,7 +6,7 @@ import ServiceManagement
 enum AppAppearance: String, CaseIterable, Identifiable {
     case system, light, dark
     var id: String { rawValue }
-    var title: String { self == .system ? "跟随系统" : self == .light ? "浅色" : "深色" }
+    var title: String { self == .system ? L10n.string("跟随系统") : self == .light ? L10n.string("浅色") : L10n.string("深色") }
     var colorScheme: ColorScheme? { self == .system ? nil : self == .light ? .light : .dark }
 }
 
@@ -123,10 +123,10 @@ final class SwapStore: ObservableObject {
     var menuBarText: String { latestSpeed?.rate.map { String(format: "%.1f t/s", $0) } ?? "— t/s" }
     var menuBarQuota: MenuBarQuota { MenuBarQuota(account: currentRow) }
     var menuBarHelp: String {
-        let model = selectedModel.isEmpty ? "全部模型" : selectedModel
-        let speed = "最近一次输出（\(model)）：\(menuBarText)"
-        guard let row = currentRow else { return "Codex Pilot\n\(speed)\n未找到已保存的当前激活账号" }
-        return "Codex Pilot\n\(speed)\n当前账号：\(row.planTitle) · \(row.email)\n\(menuBarQuota.help)"
+        let model = selectedModel.isEmpty ? L10n.string("全部模型") : selectedModel
+        let speed = L10n.string("最近一次输出（\(model)）：\(menuBarText)")
+        guard let row = currentRow else { return L10n.string("Codex Pilot\n\(speed)\n未找到已保存的当前激活账号") }
+        return L10n.string("Codex Pilot\n\(speed)\n当前账号：\(row.planTitle) · \(row.email)\n\(menuBarQuota.help)")
     }
     var lastFetchedAt: Date? { slots.compactMap(\.fetchedAt).max().map(Date.init(timeIntervalSince1970:)) }
 
@@ -265,7 +265,7 @@ final class SwapStore: ObservableObject {
     }
 
     private func scheduleCollectorRestart() {
-        captureError = collectorRestartAttempt < 3 ? "本机采集器已退出，正在重试…" : "本机采集器多次退出，请重新打开面板重试。"
+        captureError = collectorRestartAttempt < 3 ? L10n.string("本机采集器已退出，正在重试…") : L10n.string("本机采集器多次退出，请重新打开面板重试。")
         guard collectorRestartTask == nil, collectorRestartAttempt < 3 else { return }
         let delay = [2, 10, 60][collectorRestartAttempt]
         collectorRestartAttempt += 1
@@ -281,7 +281,7 @@ final class SwapStore: ObservableObject {
         do {
             captureEnabled = try await Task.detached(priority: .userInitiated) { try TelemetryCapture.configure(enabled ? "enable" : "disable") }.value
             captureError = nil
-            notify("测速设置已更新，重启 Codex 后生效")
+            notify(L10n.string("测速设置已更新，重启 Codex 后生效"))
         } catch { captureError = error.localizedDescription }
     }
 
@@ -309,7 +309,7 @@ final class SwapStore: ObservableObject {
             livePlan = state.livePlan
             liveEmail = state.liveEmail
             hasLiveAuth = state.authExists
-            warning = state.warning == nil ? nil : "当前登录尚未保存，先保存登录再切换。"
+            warning = state.warning == nil ? nil : L10n.string("当前登录尚未保存，先保存登录再切换。")
             slots = state.slots
         } catch { errorMessage = error.localizedDescription }
     }
@@ -321,7 +321,7 @@ final class SwapStore: ObservableObject {
         guard !busy, !names.isEmpty, !needsSave else { return }
         busy = true
         refreshingNames = Set(names)
-        if !silent { errorMessage = nil; status = "正在刷新额度…" }
+        if !silent { errorMessage = nil; status = L10n.string("正在刷新额度…") }
         defer { busy = false; refreshingNames.removeAll() }
         do {
             let batch = try await Task.detached(priority: silent ? .utility : .userInitiated) { try CodexSwap.quotas(names: names) }.value
@@ -331,9 +331,9 @@ final class SwapStore: ObservableObject {
             if let active = slots.first(where: { $0.active }) { livePlan = active.plan }
             if batch.failed.isEmpty {
                 errorMessage = nil
-                if !silent { notify("账号额度已刷新") }
+                if !silent { notify(L10n.string("账号额度已刷新")) }
             } else {
-                errorMessage = "\(batch.failed.count) 个账号未获取到新额度，仍显示上次数据。"
+                errorMessage = L10n.string("\(batch.failed.count) 个账号未获取到新额度，仍显示上次数据。")
                 if !silent { status = "" }
             }
         } catch {
@@ -386,17 +386,17 @@ final class SwapStore: ObservableObject {
             else { try SMAppService.mainApp.unregister() }
             loginApprovalNeeded = SMAppService.mainApp.status == .requiresApproval
             launchAtLogin = enabled
-        } catch { errorMessage = "登录时启动设置失败：\(error.localizedDescription)" }
+        } catch { errorMessage = L10n.string("登录时启动设置失败：\(error.localizedDescription)") }
     }
 
     func switchTo(_ row: SlotRow) async {
         guard !busy, !needsSave, !row.active else { return }
         busy = true
         errorMessage = nil
-        status = "正在退出 Codex…"
+        status = L10n.string("正在退出 Codex…")
         defer { busy = false }
         guard await Task.detached(priority: .userInitiated, operation: { DesktopClient.quit() }).value else {
-            errorMessage = "Codex 尚未退出，切换已取消。请先退出 Codex 再重试。"
+            errorMessage = L10n.string("Codex 尚未退出，切换已取消。请先退出 Codex 再重试。")
             status = ""
             return
         }
@@ -404,8 +404,8 @@ final class SwapStore: ObservableObject {
             try await Task.detached(priority: .userInitiated) { try CodexSwap.switchTo(row.name) }.value
             await reload()
             let opened = await Task.detached(priority: .userInitiated) { DesktopClient.open() }.value
-            notify("已切换到 \(row.planTitle)")
-            if !opened { errorMessage = "登录已切换，请手动打开 Codex。" }
+            notify(L10n.string("已切换到 \(row.planTitle)"))
+            if !opened { errorMessage = L10n.string("登录已切换，请手动打开 Codex。") }
         } catch {
             errorMessage = error.localizedDescription
             status = ""
@@ -424,7 +424,7 @@ final class SwapStore: ObservableObject {
             try await Task.detached(priority: .userInitiated) { try CodexSwap.save(name) }.value
             setPending(nil)
             await reload()
-            notify("当前登录已保存")
+            notify(L10n.string("当前登录已保存"))
         } catch { errorMessage = error.localizedDescription }
     }
 
@@ -432,10 +432,10 @@ final class SwapStore: ObservableObject {
         guard !busy, !needsSave else { return }
         busy = true
         errorMessage = nil
-        status = "正在退出 Codex…"
+        status = L10n.string("正在退出 Codex…")
         defer { busy = false }
         guard await Task.detached(priority: .userInitiated, operation: { DesktopClient.quit() }).value else {
-            errorMessage = "Codex 尚未退出，添加账号已取消。"
+            errorMessage = L10n.string("Codex 尚未退出，添加账号已取消。")
             status = ""
             return
         }
@@ -445,7 +445,7 @@ final class SwapStore: ObservableObject {
             setPending(name)
             await reload()
             if await Task.detached(priority: .userInitiated, operation: { DesktopClient.open() }).value { status = "" }
-            else { errorMessage = "请手动打开 Codex 登录，然后保存登录。" }
+            else { errorMessage = L10n.string("请手动打开 Codex 登录，然后保存登录。") }
         } catch {
             errorMessage = error.localizedDescription
             status = ""
@@ -460,7 +460,7 @@ final class SwapStore: ObservableObject {
         errorMessage = nil
         defer { busy = false }
         guard await Task.detached(priority: .userInitiated, operation: { DesktopClient.quit() }).value else {
-            errorMessage = "Codex 尚未退出，请先退出再返回原账号。"; return
+            errorMessage = L10n.string("Codex 尚未退出，请先退出再返回原账号。"); return
         }
         do {
             // Retain any newly completed login before restoring the original account.
@@ -473,8 +473,8 @@ final class SwapStore: ObservableObject {
             setPending(nil)
             await reload()
             let opened = await Task.detached(priority: .userInitiated) { DesktopClient.open() }.value
-            notify("已返回原账号")
-            if !opened { errorMessage = "请手动打开 Codex。" }
+            notify(L10n.string("已返回原账号"))
+            if !opened { errorMessage = L10n.string("请手动打开 Codex。") }
         } catch {
             errorMessage = error.localizedDescription
             _ = await Task.detached(priority: .userInitiated) { DesktopClient.open() }.value
@@ -491,7 +491,7 @@ final class SwapStore: ObservableObject {
             autoRefresh.remove(row.name)
             defaults.set(Array(autoRefresh).sorted(), forKey: "AutoRefreshSlots")
             await reload()
-            notify("账号已删除")
+            notify(L10n.string("账号已删除"))
         } catch { errorMessage = error.localizedDescription }
     }
 
@@ -517,7 +517,7 @@ final class SwapStore: ObservableObject {
         do {
             try await Task.detached(priority: .userInitiated) { try CodexSwap.order(names) }.value
             await reload()
-            notify("账号顺序已保存")
+            notify(L10n.string("账号顺序已保存"))
         } catch { errorMessage = error.localizedDescription }
     }
 

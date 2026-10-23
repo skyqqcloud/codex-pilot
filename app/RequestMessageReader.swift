@@ -4,6 +4,17 @@ struct RequestCallContent: Codable, Sendable, Hashable {
     let kind: String
     let title: String
     let text: String
+
+    var displayTitle: String {
+        if kind == "tool", title.hasPrefix("工具调用：") {
+            let rawName = String(title.dropFirst("工具调用：".count))
+            let name = rawName == "未记录名称" ? L10n.key(rawName) : rawName
+            return L10n.string("工具调用：\(name)")
+        }
+        return L10n.key(title)
+    }
+
+    var displayText: String { kind == "source" ? L10n.key(text) : text }
 }
 
 struct RequestCallContext: Codable, Sendable, Hashable {
@@ -18,6 +29,20 @@ struct RequestCallContext: Codable, Sendable, Hashable {
     var sourceTitle: String?
     var sourceDescription: String?
 
+    var displaySourceDescription: String? { sourceDescription.map(L10n.key) }
+
+    var displayOutputPreview: String? {
+        guard let outputPreview else { return nil }
+        if ["suggestion", "compaction"].contains(outputKind ?? "") { return L10n.key(outputPreview) }
+        if outputKind == "tool", outputPreview.hasPrefix("调用 ") {
+            let names = outputPreview.dropFirst(3).components(separatedBy: "、")
+                .map { $0 == "未记录名称" ? L10n.key($0) : $0 }
+                .joined(separator: L10n.isChinese ? "、" : ", ")
+            return L10n.string("调用 \(names)")
+        }
+        return outputPreview
+    }
+
     var historyResolved: Bool {
         if ["suggestion", "compaction"].contains(sourceKind ?? ""), sourceTitle != nil, sourceDescription != nil { return true }
         return groupID != nil && groupPreview != nil && outputPreview != nil
@@ -28,16 +53,16 @@ struct RequestCallContext: Codable, Sendable, Hashable {
             sourceTitle != nil && sourceDescription != nil
         var sections: [RequestCallContent] = []
         if let message {
-            sections.append(RequestCallContent(kind: "user", title: "发起消息", text: message))
+            sections.append(RequestCallContent(kind: "user", title: L10n.string("发起消息"), text: message))
         } else if !knownSource {
-            sections.append(RequestCallContent(kind: "user", title: "发起消息", text: "未找到关联的本地消息"))
+            sections.append(RequestCallContent(kind: "user", title: L10n.string("发起消息"), text: L10n.string("未找到关联的本地消息")))
         }
         if knownSource {
             sections.append(RequestCallContent(kind: "source", title: sourceTitle!, text: sourceDescription!))
         }
         if let content, !content.isEmpty { sections += content }
         else if !knownSource {
-            sections.append(RequestCallContent(kind: "output", title: "本次调用", text: "未找到关联的本地输出"))
+            sections.append(RequestCallContent(kind: "output", title: L10n.string("本次调用"), text: L10n.string("未找到关联的本地输出")))
         }
         return sections
     }
@@ -238,13 +263,13 @@ private final class ContextWorker {
             while response.last != 10 {
                 let chunk = output!.availableData
                 guard !chunk.isEmpty, response.count + chunk.count <= 32 * 1024 * 1024 else {
-                    throw SwapError.failed("无法读取本地对话记录")
+                    throw SwapError.failed(L10n.string("无法读取本地对话记录"))
                 }
                 response.append(chunk)
             }
             let reply = try JSONSerialization.jsonObject(with: response) as? [String: Any]
             guard let result = reply?["result"], reply?["error"] == nil else {
-                throw SwapError.failed("无法读取本地对话记录")
+                throw SwapError.failed(L10n.string("无法读取本地对话记录"))
             }
             return try JSONSerialization.data(withJSONObject: result)
         } catch {

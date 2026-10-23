@@ -77,9 +77,9 @@ struct ContentView: View {
                 Button { page = .main; store.errorMessage = nil } label: {
                     Image(systemName: "chevron.left").font(.system(size: 12)).frame(width: PanelLayout.controlHeight, height: PanelLayout.controlHeight)
                 }.buttonStyle(PanelButtonStyle(cornerRadius: 6))
-                    .accessibilityLabel("返回").accessibilityIdentifier("panel-back")
+                    .accessibilityLabel(L10n.string("返回")).accessibilityIdentifier("panel-back")
             }
-            Text(page == .main ? "Codex Pilot" : page == .settings ? "设置" : page == .stats ? "输出测速" : "管理账号")
+            Text(page == .main ? "Codex Pilot" : page == .settings ? L10n.string("设置") : page == .stats ? L10n.string("输出测速") : L10n.string("管理账号"))
                 .font(.system(size: 14, weight: .semibold))
             Spacer()
             if page == .main {
@@ -87,7 +87,7 @@ struct ContentView: View {
                     Image(systemName: "slider.horizontal.3").font(.system(size: 13))
                         .foregroundStyle(palette.secondary).frame(width: PanelLayout.controlHeight, height: PanelLayout.controlHeight)
                 }.buttonStyle(PanelButtonStyle(cornerRadius: 6))
-                    .accessibilityLabel("设置").help("设置").accessibilityIdentifier("panel-settings")
+                    .accessibilityLabel(L10n.string("设置")).help(L10n.string("设置")).accessibilityIdentifier("panel-settings")
             }
         }
         .padding(.horizontal, PanelLayout.contentInset).padding(.top, 10).padding(.bottom, 6)
@@ -97,8 +97,8 @@ struct ContentView: View {
         VStack(spacing: 0) {
             if store.pendingSaveAfterAdd != nil {
                 VStack(alignment: .leading, spacing: 7) {
-                    Text("在 Codex 完成登录后，保存新账号。不要点 Log out。").font(.system(size: 11))
-                    Button("返回原账号") { confirmation = .returnToPrevious }
+                    Text(L10n.string("在 Codex 完成登录后，保存新账号。不要点 Log out。")).font(.system(size: 11))
+                    Button(L10n.string("返回原账号")) { confirmation = .returnToPrevious }
                         .font(.system(size: 11))
                         .buttonStyle(PanelButtonStyle(cornerRadius: 4, backgroundPadding: 3)).disabled(store.busy)
                 }
@@ -112,7 +112,7 @@ struct ContentView: View {
             ThroughputPanel(store: store) { page = .stats }
             PanelRule()
             HStack(spacing: 7) {
-                Text("账号").font(.system(size: 12, weight: .medium))
+                Text(L10n.string("账号")).font(.system(size: 12, weight: .medium))
                 Text("\(store.slots.count)").font(.system(size: 11)).foregroundStyle(palette.secondary)
                 Spacer()
                 Button { Task { await store.refreshAllFetched() } } label: {
@@ -121,15 +121,15 @@ struct ContentView: View {
                 }
                 .buttonStyle(PanelButtonStyle(cornerRadius: 6)).foregroundStyle(palette.secondary)
                 .disabled(store.busy || store.needsSave || store.slots.isEmpty)
-                .help("联网刷新所有账号额度").accessibilityIdentifier("refresh-quotas")
+                .help(L10n.string("联网刷新所有账号额度")).accessibilityIdentifier("refresh-quotas")
             }.padding(.horizontal, PanelLayout.contentInset).padding(.top, 7).padding(.bottom, 3)
             if store.slots.isEmpty {
                 VStack(alignment: .leading, spacing: 7) {
-                    Text("还没有保存的账号").font(.system(size: 13, weight: .medium))
-                    Text(store.hasLiveAuth ? "点「保存登录」记录当前账号。" : "先在 Codex 中登录，再保存登录。")
+                    Text(L10n.string("还没有保存的账号")).font(.system(size: 13, weight: .medium))
+                    Text(store.hasLiveAuth ? L10n.string("点「保存登录」记录当前账号。") : L10n.string("先在 Codex 中登录，再保存登录。"))
                         .font(.system(size: 11)).foregroundStyle(palette.secondary)
                     if !store.hasLiveAuth {
-                        Button("打开 Codex 登录") { Task { await store.openCodex() } }
+                        Button(L10n.string("打开 Codex 登录")) { Task { await store.openCodex() } }
                             .buttonStyle(PanelButtonStyle(cornerRadius: 4, backgroundPadding: 3)).font(.system(size: 11))
                     }
                 }
@@ -147,9 +147,9 @@ struct ContentView: View {
                             }
                             .disabled(store.busy || store.needsSave)
                             .contextMenu {
-                                Button("刷新这个账号额度") { Task { await store.refreshSlot(row.name) } }
+                                Button(L10n.string("刷新这个账号额度")) { Task { await store.refreshSlot(row.name) } }
                                     .disabled(store.busy || store.needsSave)
-                                Button(store.autoRefresh.contains(row.name) ? "关闭自动刷新" : "开启自动刷新") {
+                                Button(store.autoRefresh.contains(row.name) ? L10n.string("关闭自动刷新") : L10n.string("开启自动刷新")) {
                                     store.toggleAutoRefresh(row.name)
                                 }.disabled(store.busy)
                             }
@@ -162,7 +162,7 @@ struct ContentView: View {
                 Spacer(minLength: 4)
                 if enabledAutoCount > 0 {
                     Image(systemName: "clock.arrow.circlepath").font(.system(size: 10))
-                    Text(enabledAutoCount == 1 ? "\(enabledAutoTitle) 自动刷新" : "\(enabledAutoCount) 个自动刷新")
+                    Text(enabledAutoCount == 1 ? L10n.string("\(enabledAutoTitle) 自动刷新") : L10n.string("\(enabledAutoCount) 个自动刷新"))
                 }
             }
             .font(.system(size: 10)).foregroundStyle(palette.tertiary)
@@ -170,16 +170,16 @@ struct ContentView: View {
             if let error = store.errorMessage { message(error, error: true) }
             PanelRule()
             VStack(spacing: 0) {
-                PanelAction(title: "保存登录", symbol: "bookmark", shortcut: "⌘ S", highlighted: store.needsSave) {
+                PanelAction(title: L10n.string("保存登录"), symbol: "bookmark", shortcut: "⌘ S", highlighted: store.needsSave) {
                     Task { await store.saveCurrent() }
                 }
                 .disabled(store.busy || !store.hasLiveAuth)
                 .keyboardShortcut("s", modifiers: .command)
                 .accessibilityIdentifier("save-login")
-                PanelAction(title: "添加账号…", symbol: "plus") { confirmation = .addAccount }
+                PanelAction(title: L10n.string("添加账号…"), symbol: "plus") { confirmation = .addAccount }
                     .disabled(store.busy || store.needsSave || !store.hasLiveAuth)
                     .accessibilityIdentifier("add-account")
-                PanelAction(title: "管理账号", symbol: "person.2", disclosure: true) { page = .manage }
+                PanelAction(title: L10n.string("管理账号"), symbol: "person.2", disclosure: true) { page = .manage }
                     .disabled(store.busy).accessibilityIdentifier("manage-accounts")
             }.padding(.horizontal, PanelLayout.rowOuterInset).padding(.vertical, 3)
             if !store.status.isEmpty {
@@ -193,7 +193,7 @@ struct ContentView: View {
                 .padding(.horizontal, PanelLayout.contentInset).padding(.bottom, 8)
             }
             PanelRule()
-            PanelAction(title: "退出 Codex Pilot", symbol: "power", shortcut: "⌘ Q") {
+            PanelAction(title: L10n.string("退出 Codex Pilot"), symbol: "power", shortcut: "⌘ Q") {
                 NSApplication.shared.terminate(nil)
             }
             .keyboardShortcut("q", modifiers: .command)
@@ -212,7 +212,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 6) {
                             Text(row.planTitle)
-                            if row.name == store.current { Text("当前").font(.system(size: 11)).foregroundStyle(palette.green) }
+                            if row.name == store.current { Text(L10n.string("当前")).font(.system(size: 11)).foregroundStyle(palette.green) }
                         }
                         Text(row.email).font(.system(size: 11)).foregroundStyle(palette.secondary)
                             .lineLimit(1).truncationMode(.middle)
@@ -220,13 +220,13 @@ struct ContentView: View {
                     Spacer(minLength: 7)
                     Button { Task { await store.move(row.name, direction: -1) } } label: {
                         Image(systemName: "chevron.up").frame(width: PanelLayout.controlHeight, height: PanelLayout.controlHeight)
-                    }.disabled(store.busy || !store.canMoveUp(row.name)).help("上移")
+                    }.disabled(store.busy || !store.canMoveUp(row.name)).help(L10n.string("上移"))
                     Button { Task { await store.move(row.name, direction: 1) } } label: {
                         Image(systemName: "chevron.down").frame(width: PanelLayout.controlHeight, height: PanelLayout.controlHeight)
-                    }.disabled(store.busy || !store.canMoveDown(row.name)).help("下移")
+                    }.disabled(store.busy || !store.canMoveDown(row.name)).help(L10n.string("下移"))
                     Button { confirmation = .deleteAccount(row) } label: {
                         Image(systemName: "trash").frame(width: PanelLayout.controlHeight, height: PanelLayout.controlHeight).foregroundStyle(palette.red)
-                    }.disabled(store.busy || row.name == store.current).help("删除账号")
+                    }.disabled(store.busy || row.name == store.current).help(L10n.string("删除账号"))
                 }
                 .font(.system(size: 12)).buttonStyle(PanelButtonStyle(cornerRadius: 5)).padding(.vertical, 12)
                 .onDrag { NSItemProvider(object: row.name as NSString) }
@@ -240,7 +240,7 @@ struct ContentView: View {
                 }
                 Divider()
             }
-            Text("拖动账号或使用箭头调整顺序。当前账号需要先切换后才能删除。")
+            Text(L10n.string("拖动账号或使用箭头调整顺序。当前账号需要先切换后才能删除。"))
                 .font(.system(size: 11)).foregroundStyle(palette.secondary)
                 .fixedSize(horizontal: false, vertical: true).padding(.top, 11)
         }.padding(.horizontal, PanelLayout.contentInset).padding(.bottom, 18)
@@ -256,7 +256,7 @@ struct ContentView: View {
                 Button { store.errorMessage = nil } label: {
                     Image(systemName: "xmark").font(.system(size: 9)).frame(width: 20, height: 20)
                 }
-                .buttonStyle(PanelButtonStyle(cornerRadius: 5)).accessibilityLabel("关闭提示")
+                .buttonStyle(PanelButtonStyle(cornerRadius: 5)).accessibilityLabel(L10n.string("关闭提示"))
             }
         }
         .foregroundStyle(palette.amber).padding(9)
@@ -277,7 +277,7 @@ struct ContentView: View {
             HStack(spacing: 8) {
                 Spacer()
                 Button { confirmation = nil } label: {
-                    Text("取消").padding(.horizontal, 12).padding(.vertical, 7)
+                    Text(L10n.string("取消")).padding(.horizontal, 12).padding(.vertical, 7)
                 }
                 .buttonStyle(PanelButtonStyle(kind: .neutral))
                 .keyboardShortcut(.cancelAction)
@@ -315,26 +315,26 @@ struct ContentView: View {
     }
     private func confirmationTitle(_ item: PanelConfirmation) -> String {
         switch item {
-        case .switchAccount(let row): return "切换到 \(row.planTitle)？"
-        case .deleteAccount(let row): return "删除 \(row.planTitle)？"
-        case .addAccount: return "登录一个新账号"
-        case .returnToPrevious: return "返回原账号？"
+        case .switchAccount(let row): return L10n.string("切换到 \(row.planTitle)？")
+        case .deleteAccount(let row): return L10n.string("删除 \(row.planTitle)？")
+        case .addAccount: return L10n.string("登录一个新账号")
+        case .returnToPrevious: return L10n.string("返回原账号？")
         }
     }
     private func confirmationMessage(_ item: PanelConfirmation) -> String {
         switch item {
-        case .switchAccount(let row): return "\(row.email)\n\n会退出并重新打开 Codex，正在进行的任务会中断。"
-        case .deleteAccount(let row): return "\(row.email)\n\n移除保存的登录。下次使用这个账号时，需要重新登录。"
-        case .addAccount: return "先保存当前登录，再退出 Codex 并打开登录界面。\n\n登录完成后，回到状态栏保存登录。不要点 Log out。"
-        case .returnToPrevious: return "会退出 Codex 并恢复之前的账号。已完成的新登录会先保存。"
+        case .switchAccount(let row): return L10n.string("\(row.email)\n\n会退出并重新打开 Codex，正在进行的任务会中断。")
+        case .deleteAccount(let row): return L10n.string("\(row.email)\n\n移除保存的登录。下次使用这个账号时，需要重新登录。")
+        case .addAccount: return L10n.string("先保存当前登录，再退出 Codex 并打开登录界面。\n\n登录完成后，回到状态栏保存登录。不要点 Log out。")
+        case .returnToPrevious: return L10n.string("会退出 Codex 并恢复之前的账号。已完成的新登录会先保存。")
         }
     }
     private func confirmationAction(_ item: PanelConfirmation) -> String {
         switch item {
-        case .switchAccount: return "退出并切换"
-        case .deleteAccount: return "删除账号"
-        case .addAccount: return "打开登录"
-        case .returnToPrevious: return "返回原账号"
+        case .switchAccount: return L10n.string("退出并切换")
+        case .deleteAccount: return L10n.string("删除账号")
+        case .addAccount: return L10n.string("打开登录")
+        case .returnToPrevious: return L10n.string("返回原账号")
         }
     }
 }

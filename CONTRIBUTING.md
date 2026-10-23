@@ -10,6 +10,7 @@
 bash scripts/check.sh
 bash scripts/build-dmg.sh
 bash scripts/check-scroll-layout.sh  # 涉及原生界面、账号展示、分组或调度时
+CODEX_PILOT_TEST_LANGUAGE=en bash scripts/check-scroll-layout.sh  # 英文布局与动态文案
 ```
 
 这些检查使用合成文件和模拟 HTTP 响应。原生界面检查需要可用的 macOS WindowServer。只有明确需要本机数据审查时，才手动运行 `bash scripts/check.sh --live`，不要把其输出公开上传。

@@ -52,6 +52,7 @@ struct ScrollLayoutCheck {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.prohibited)
         let base = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
+        checkLocalization()
         let prefs = UserDefaults(suiteName: "ScrollLayoutCheck")!
         prefs.setVolatileDomain(["ThroughputWindow": 300], forName: "ScrollLayoutCheck")
         let store = SwapStore(defaults: prefs, scanner: SessionScanner(codexHome: base.appendingPathComponent("fixtures")),
@@ -86,7 +87,7 @@ struct ScrollLayoutCheck {
         let date = calendar.date(from: DateComponents(year: 2026, month: 10, day: 10, hour: 12, minute: 30, second: 45))!
         precondition(PanelFormat.requestTime(date.timeIntervalSince1970, now: date, calendar: calendar) == "12:30:45",
                      "today's requests still repeat the full date")
-        precondition(PanelFormat.requestTime(date.addingTimeInterval(-86400).timeIntervalSince1970, now: date, calendar: calendar) == "10月9日 12:30:45",
+        precondition(PanelFormat.requestTime(date.addingTimeInterval(-86400).timeIntervalSince1970, now: date, calendar: calendar) == (L10n.isChinese ? "10月9日 12:30:45" : "Oct 9 12:30:45"),
                      "cross-day request dates are ambiguous")
         store.selectedModel = "gpt-6.1-sol"
         let fullMessage = await store.requestMessage(for: store.latestSpeed!)
@@ -189,7 +190,7 @@ struct ScrollLayoutCheck {
             "an unknown plan was guessed from its available quota")
         await store.refreshSlot("b")
         let free = store.slots.first { $0.name == "b" }!
-        precondition(free.planTitle == "Free" && free.fiveWindowTitle == "30 天" && free.hasSingleFreeWindow,
+        precondition(free.planTitle == "Free" && free.fiveWindowTitle == (L10n.isChinese ? "30 天" : "30d") && free.hasSingleFreeWindow,
                      "manual quota refresh did not update the plan and actual Free quota period")
         let unknownPlan = free.withQuota(SlotQuota(five: 80, fiveWhen: "", fiveResetAt: nil, week: nil,
                                                  weekWhen: "", weekResetAt: nil, fetchedAt: nil))
@@ -365,7 +366,7 @@ struct ScrollLayoutCheck {
                              "metrics content cannot scroll to the bottom")
                 let pickers = findPickers(view)
                 precondition(pickers.count == 1, "obsolete window selector is still present")
-                let modelPicker = pickers.first { $0.itemTitles.contains("全部模型") }!
+                let modelPicker = pickers.first { $0.itemTitles.contains(L10n.string("全部模型")) }!
                 let modelIndex = modelPicker.itemTitles.firstIndex(of: "gpt-6.1-sol")!
                 modelPicker.selectItem(at: modelIndex)
                 _ = NSApp.sendAction(modelPicker.action!, to: modelPicker.target, from: modelPicker)
@@ -547,6 +548,46 @@ struct ScrollLayoutCheck {
         print("QoS: real Python children honor background/utility/user priorities; collector is background and settings remain responsive.")
     }
 
+    static func checkLocalization() {
+        let chinese = L10n.isChinese
+        let expected = UserDefaults.standard.stringArray(forKey: "AppleLanguages")!.first!
+        precondition(Bundle.main.preferredLocalizations.first == expected, "test language was not selected by the app bundle")
+        precondition(L10n.string("保存登录") == (chinese ? "保存登录" : "Save login"), "static interface translation missing")
+        let plan = "Pro 100", count = 3, one = 1, quota = 82, window = chinese ? "7 天" : "7d"
+        precondition(L10n.string("切换到 \(plan)？") == (chinese ? "切换到 Pro 100？" : "Switch to Pro 100?"),
+                     "account confirmation lost its interpolated plan")
+        precondition(L10n.string("\(count) 条") == (chinese ? "3 条" : "3 requests"), "numeric interpolation is not localized")
+        precondition(L10n.string("\(one) 条") == (chinese ? "1 条" : "1 request"), "English singular request count is incorrect")
+        precondition(L10n.string("\(window)剩余 \(quota)%") == (chinese ? "7 天剩余 82%" : "7d remaining: 82%"),
+                     "quota interpolation or literal percent is incorrect")
+        precondition(String(format: L10n.string("%.2f 秒"), 1.25) == (chinese ? "1.25 秒" : "1.25 s"),
+                     "duration format changed its numeric value")
+        let accountError = SwapError.failed("另一个账号操作尚未完成，请稍后重试。").localizedDescription
+        precondition(accountError == (chinese ? "另一个账号操作尚未完成，请稍后重试。" : "Another account operation is still running. Please try again shortly."),
+                     "fixed backend errors are not localized")
+        let userText = "设置", output = "后台 · 消息建议"
+        precondition(RequestCallContent(kind: "user", title: "发起消息", text: userText).displayText == userText,
+                     "a user message matching a catalog key was translated")
+        let response = RequestCallContent(kind: "output", title: "输出内容", text: output)
+        precondition(response.displayText == output && response.displayTitle == (chinese ? "输出内容" : "Output"),
+                     "model output was translated or its label was not localized")
+        let tool = RequestCallContent(kind: "tool", title: "工具调用：exec", text: "中文工具参数")
+        precondition(tool.displayTitle == (chinese ? "工具调用：exec" : "Tool call: exec") && tool.displayText == "中文工具参数",
+                     "tool names or arguments were changed by localization")
+        let namedTool = RequestCallContent(kind: "tool", title: "工具调用：设置", text: "")
+        precondition(namedTool.displayTitle == (chinese ? "工具调用：设置" : "Tool call: 设置"),
+                     "an actual tool name matching a localization key was translated")
+        let preview = RequestCallContext(outputPreview: "调用 exec、send_message", outputKind: "tool")
+        precondition(preview.displayOutputPreview == (chinese ? "调用 exec、send_message" : "Call exec, send_message"),
+                     "tool preview was not localized")
+        let source = RequestCallContext(outputPreview: output, outputKind: "suggestion")
+        precondition(source.displayOutputPreview == (chinese ? output : "Background · Message suggestion"),
+                     "background source label was not localized")
+        precondition(RequestCallContext(outputPreview: output, outputKind: "output").displayOutputPreview == output,
+                     "ordinary model output was mistaken for an internal source label")
+        print("Localization: \(expected); labels, dynamic counts, percent, duration, backend errors and untouched user/model/tool text passed.")
+    }
+
     static func checkMenuBar(store: SwapStore, base: URL) async throws {
         let cache = base.appendingPathComponent("Checker.app/Contents/Resources/layout-slot-state.json")
         let original = try Data(contentsOf: cache)
@@ -564,7 +605,7 @@ struct ScrollLayoutCheck {
         try await reload(["a": ["five": 0, "week": 82]], expected: "0%")
         try await reload(["a": ["plan": "free", "five": 100, "week": NSNull(),
                                 "five_window_seconds": 2592000]], expected: "100%")
-        precondition(store.menuBarHelp.contains("30 天剩余 100%"), "Free quota tooltip used a five-hour period")
+        precondition(store.menuBarHelp.contains(L10n.isChinese ? "30 天剩余 100%" : "30d remaining: 100%"), "Free quota tooltip used a five-hour period")
         try await reload(["a": ["five": NSNull(), "week": NSNull()]], expected: "—")
         try await reload(["a": ["active": false], "b": ["active": true]], expected: "63%")
         precondition(store.menuBarHelp.contains("second@example.com"), "account switch retained the previous tooltip")

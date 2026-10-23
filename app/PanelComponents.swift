@@ -88,7 +88,7 @@ enum PanelFormat {
         value.formatted(.number.precision(.fractionLength(1)).grouping(.automatic))
     }
 
-    static func model(_ value: String) -> String { value == "unknown" ? "未记录模型" : value }
+    static func model(_ value: String) -> String { value == "unknown" ? L10n.string("未记录模型") : value }
 
     static func tokens(_ value: Int) -> String {
         value.formatted(.number.grouping(.automatic).locale(Locale(identifier: "en_US")))
@@ -97,31 +97,31 @@ enum PanelFormat {
     static func requestTime(_ timestamp: Double, now: Date = Date(), calendar: Calendar = .current) -> String {
         let date = Date(timeIntervalSince1970: timestamp)
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = L10n.locale
         formatter.timeZone = calendar.timeZone
         if calendar.isDate(date, inSameDayAs: now) { formatter.dateFormat = "HH:mm:ss" }
         else if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
-            formatter.dateFormat = "M月d日 HH:mm:ss"
-        } else { formatter.dateFormat = "yyyy年M月d日 HH:mm:ss" }
+            formatter.dateFormat = L10n.string("M月d日 HH:mm:ss")
+        } else { formatter.dateFormat = L10n.string("yyyy年M月d日 HH:mm:ss") }
         return formatter.string(from: date)
     }
 
     static func reset(_ timestamp: Double?, fallback: String, known: Bool, now: Date) -> String {
         guard known else { return "" }
-        guard let timestamp else { return fallback.isEmpty ? "重置时间未记录" : fallback }
+        guard let timestamp else { return fallback.isEmpty ? L10n.string("重置时间未记录") : fallback }
         let seconds = Int(timestamp - now.timeIntervalSince1970)
-        if seconds <= 0 { return "待刷新" }
+        if seconds <= 0 { return L10n.string("待刷新") }
         let days = seconds / 86400, hours = (seconds % 86400) / 3600, minutes = (seconds % 3600) / 60
-        if days > 0 { return "\(days)天\(hours)小时后重置" }
-        if hours > 0 { return "\(hours)小时\(minutes)分后重置" }
-        return "\(max(1, minutes))分钟后重置"
+        if days > 0 { return L10n.string("\(days)天\(hours)小时后重置") }
+        if hours > 0 { return L10n.string("\(hours)小时\(minutes)分后重置") }
+        return L10n.string("\(max(1, minutes))分钟后重置")
     }
 
     static func updated(_ date: Date?) -> String {
-        guard let date else { return "额度尚未刷新" }
+        guard let date else { return L10n.string("额度尚未刷新") }
         let formatter = DateFormatter()
         formatter.dateFormat = Calendar.current.isDateInToday(date) ? "HH:mm" : "MM-dd HH:mm"
-        return "最近刷新 \(formatter.string(from: date))"
+        return L10n.string("最近刷新 \(formatter.string(from: date))")
     }
 }
 
@@ -147,7 +147,7 @@ struct AccountPanelRow: View {
                         }
                         .frame(width: 14, height: 14)
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("当前账号")
+                        .accessibilityLabel(L10n.string("当前账号"))
                     }
                     Spacer(minLength: 4)
                     Text(row.email).font(.system(size: 11)).foregroundStyle(palette.secondary)
@@ -209,8 +209,8 @@ struct QuotaPanelMeter: View {
             }
             .frame(height: 5)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(title)剩余额度")
-            .accessibilityValue(value == nil ? "暂无数据" : "\(percent)%")
+            .accessibilityLabel(L10n.string("\(title)剩余额度"))
+            .accessibilityValue(value == nil ? L10n.string("暂无数据") : "\(percent)%")
             Text(PanelFormat.reset(resetAt, fallback: fallback, known: value != nil, now: now))
                 .font(.system(size: 10)).foregroundStyle(palette.tertiary).lineLimit(1)
                 .frame(height: 12, alignment: .leading)

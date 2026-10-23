@@ -60,7 +60,7 @@ struct RequestSpeedAverage {
     let value: Double?
 
     var explanation: String {
-        "最近 \(requestCount) 条已采集完成记录中，\(measuredCount) 条有可靠计时；按各次速度取算术平均，缺失值不当作 0，也不从更早记录补位。"
+        L10n.string("最近 \(requestCount) 条已采集完成记录中，\(measuredCount) 条有可靠计时；按各次速度取算术平均，缺失值不当作 0，也不从更早记录补位。")
     }
 }
 

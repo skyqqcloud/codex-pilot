@@ -1,7 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-CHECK_BUILD="$ROOT/.build/scroll-layout"
+CHECK_LANGUAGE="${CODEX_PILOT_TEST_LANGUAGE:-zh-Hans}"
+case "$CHECK_LANGUAGE" in
+  zh-Hans) CHECK_BUILD="$ROOT/.build/scroll-layout" ;;
+  en) CHECK_BUILD="$ROOT/.build/scroll-layout-en" ;;
+  *) echo "Unsupported layout check language: $CHECK_LANGUAGE" >&2; exit 1 ;;
+esac
 mkdir -p "$CHECK_BUILD/Checker.app/Contents/MacOS" "$CHECK_BUILD/Checker.app/Contents/Resources"
 /usr/bin/python3 - "$CHECK_BUILD" <<'PY'
 from pathlib import Path
@@ -9,7 +14,8 @@ import datetime, json, plistlib, sqlite3, sys
 root = Path(sys.argv[1]); app = root / 'Checker.app'
 (app / 'Contents/Info.plist').write_bytes(plistlib.dumps(dict(
     CFBundleIdentifier='local.wmy.ScrollLayoutCheck', CFBundleExecutable='Checker',
-    CFBundleName='Scroll Layout Check', CFBundlePackageType='APPL', LSUIElement=True)))
+    CFBundleName='Scroll Layout Check', CFBundlePackageType='APPL', LSUIElement=True,
+    CFBundleDevelopmentRegion='en', CFBundleLocalizations=['en','zh-Hans'])))
 (app / 'Contents/Resources/codex-swap.py').write_text(
     '''import json,time,sys
 from pathlib import Path
@@ -99,6 +105,7 @@ samples += [dict(id=str(index),model='gpt-6.1-sol',completedAt=stamp-index*20,
             for index in range(5,120)]
 (root / 'fixtures/speeds.json').write_text(json.dumps(dict(samples=samples)))
 PY
+cp -R "$ROOT/app/Resources/"*.lproj "$CHECK_BUILD/Checker.app/Contents/Resources/"
 SDK="$(xcrun --show-sdk-path)"
 if [ -d /Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk ]; then
     SDK=/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk
@@ -111,4 +118,4 @@ swiftc -parse-as-library -swift-version 5 -sdk "$SDK" \
     -module-cache-path "$CHECK_BUILD/ModuleCache" \
     "${APP_SOURCES[@]}" "$ROOT/app/Telemetry/"*.swift \
     "$ROOT/tests/scroll-layout-check.swift" -o "$CHECK_BUILD/Checker.app/Contents/MacOS/Checker"
-"$CHECK_BUILD/Checker.app/Contents/MacOS/Checker" "$CHECK_BUILD"
+"$CHECK_BUILD/Checker.app/Contents/MacOS/Checker" "$CHECK_BUILD" -AppleLanguages "($CHECK_LANGUAGE)"

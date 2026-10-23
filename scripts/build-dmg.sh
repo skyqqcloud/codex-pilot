@@ -20,7 +20,13 @@ DMG="$DIST/${APP_NAME}.dmg"
 SDK="$(xcrun --show-sdk-path)"
 SDK_PINNED=0
 SDK26="/Library/Developer/CommandLineTools/SDKs/MacOSX26.sdk"
-if [ -d "$SDK26" ]; then
+if [ -n "${CODEX_PILOT_SDK:-}" ]; then
+  if [ ! -d "$CODEX_PILOT_SDK" ]; then
+    echo "!! CODEX_PILOT_SDK 不是有效的 SDK 目录：$CODEX_PILOT_SDK" >&2
+    exit 1
+  fi
+  SDK="$CODEX_PILOT_SDK"
+elif [ -d "$SDK26" ]; then
   SDK="$SDK26"
   SDK_PINNED=1
 else
@@ -41,6 +47,7 @@ fi
 swiftc -parse-as-library -O -swift-version 5 \
   -target arm64-apple-macosx14.0 \
   -sdk "$SDK" \
+  -file-prefix-map "$ROOT=." -debug-prefix-map "$ROOT=." \
   -module-cache-path "$DIST/build/ModuleCache" \
   -o "$DIST/build/$BIN_NAME" \
   "$APP_SRC/"*.swift \
@@ -73,6 +80,7 @@ cp "$ROOT/backend/tps-capture.py" "$APP/Contents/Resources/tps-capture.py"
 cp "$ROOT/backend/request-context.py" "$APP/Contents/Resources/request-context.py"
 chmod +x "$APP/Contents/Resources/codex-swap.py"
 cp -R "$ROOT/ThirdParty" "$APP/Contents/Resources/ThirdParty"
+cp "$ROOT/LICENSE" "$ROOT/NOTICE" "$APP/Contents/Resources/"
 
 echo "==> ad-hoc 签名"
 codesign --force --sign - \
@@ -100,7 +108,7 @@ Codex Pilot — 安装说明
    或：系统设置 → 隐私与安全性 → 「仍要打开」。
 3. 需要 macOS 14 或更高。
 4. 本工具常驻 macOS 状态栏，不显示 Dock 图标。
-   点击状态栏的双向箭头打开面板。
+   点击状态栏的双向箭头或双行数值打开面板。
 5. 先登录 Codex，再打开本工具：
    「保存登录」记录当前账号；「添加账号」登录另一个账号。
    添加账号时不要点 Codex 里的 Log out。

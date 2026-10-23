@@ -11,3 +11,16 @@ __pycache__/
 *.py[cod]
 .env
 .env.*
+
+# Never publish local logins, runtime databases, or signing material
+/.codex/
+/.codex-swap/
+/telemetry/
+auth.json
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.pem
+*.key
+*.p12
+*.pfx

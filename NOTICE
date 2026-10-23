@@ -1,0 +1,11 @@
+Codex Pilot
+Copyright 2026 skyqqcloud and the Codex Pilot contributors.
+
+This product includes software derived from OPL Fleet Agent:
+Copyright 2026 Gaofeng.
+Source: https://github.com/gaofeng21cn/opl-fleet-agent
+Upstream revision: 902e2ceafc3716f959915a0dd78bbbeff95ae2e2
+License: Apache License 2.0.
+
+Derived telemetry files are identified in their source headers. The upstream
+license and modification notice are retained in ThirdParty/OPLFleetAgent/.

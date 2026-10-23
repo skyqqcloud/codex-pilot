@@ -151,9 +151,9 @@
       const $ = selector => root.querySelector(selector);
       const prefs = { appearance:'跟随系统', scenario:'正常', showTPS:false };
       const seed = [
-        {id:'pro',name:'Pro',email:'work•••@gmail.com',five:62,week:38,fiveReset:'2小时14分后重置',weekReset:'3天8小时后重置'},
-        {id:'plus',name:'Plus',email:'personal•••@outlook.com',five:94,week:81,fiveReset:'4小时32分后重置',weekReset:'5天2小时后重置'},
-        {id:'lite',name:'Pro Lite',email:'backup•••@gmail.com',five:8,week:24,fiveReset:'48分钟后重置',weekReset:'1天6小时后重置'}
+        {id:'pro',name:'Pro',email:'work@example.test',five:62,week:38,fiveReset:'2小时14分后重置',weekReset:'3天8小时后重置'},
+        {id:'plus',name:'Plus',email:'personal@example.test',five:94,week:81,fiveReset:'4小时32分后重置',weekReset:'5天2小时后重置'},
+        {id:'lite',name:'Pro Lite',email:'backup@example.test',five:8,week:24,fiveReset:'48分钟后重置',weekReset:'1天6小时后重置'}
       ];
       const samples = {
         60:{all:{output:87.5,input:24077.7,reasoning:28.5,cache:77,requests:10,sessions:3},sol:{output:70.4,input:20433.3,reasoning:23,cache:76,requests:8,sessions:2},astra:{output:17.1,input:3644.4,reasoning:5.5,cache:82,requests:2,sessions:1}},
@@ -295,7 +295,7 @@
         if(button.dataset.move){moveAccount(button.dataset.move,Number(button.dataset.direction));return;}
         if(button.dataset.delete){if(button.dataset.delete!==state.current)openModal('delete',button.dataset.delete);return;}
         if(button.dataset.action==='save'){
-          if(needsSave()){const id='new'+(++state.newIndex);state.accounts.push({id,name:'Plus',email:'new•••@gmail.com',five:null,week:null,fiveReset:'',weekReset:''});state.current=id;state.pending=false;if(prefs.scenario==='当前登录未保存')prefs.scenario='正常';}
+          if(needsSave()){const id='new'+(++state.newIndex);state.accounts.push({id,name:'Plus',email:'new@example.test',five:null,week:null,fiveReset:'',weekReset:''});state.current=id;state.pending=false;if(prefs.scenario==='当前登录未保存')prefs.scenario='正常';}
           state.toast='当前登录已保存';render();remember();$('#cp-save').focus();return;
         }
         if(button.dataset.action==='add'){if(!needsSave())openModal('add');else{state.toast='先保存当前登录，再添加账号';render();}return;}

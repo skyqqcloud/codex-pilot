@@ -6,6 +6,7 @@ final class TelemetryCapture: @unchecked Sendable {
     private var process: Process?
     private var shutdown: NSObjectProtocol?
     var onExit: (@Sendable () -> Void)?
+    var isRunning: Bool { process?.isRunning == true }
 
     private static var python: URL {
         URL(fileURLWithPath: ["/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"]

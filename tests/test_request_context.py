@@ -27,6 +27,38 @@ class ContextTests(unittest.TestCase):
   self.message(1001,'# Files mentioned by the user:\nSECRET_FILE\n## My request:\n帮我检查这个项目。后面的内容不用显示\n<image name="s">PRIVATE_IMAGE</image>')
   self.message(1010,'现在改一下按钮。第二句')
   return context.RequestContext(self.home)
+ def test_project_and_title_require_exact_thread_metadata(self):
+  self.message(1000,'要求');self.assistant(1004,'结果')
+  with sqlite3.connect(self.home/'state_5.sqlite') as db:
+   db.execute('create table threads(id text,rollout_path text,title text,cwd text)')
+   db.execute('insert into threads values(?,?,?,?)',(ID,str(self.path),'真实对话名称','/projects/Example'))
+  sample=self.sample('one',1001,1005);before=sample.copy()
+  info=context.RequestContext(self.home).call_contexts([sample],'one')['one']
+  self.assertEqual(info['projectPath'],'/projects/Example');self.assertEqual(info['conversationTitle'],'真实对话名称')
+  self.assertEqual(sample,before)
+  with sqlite3.connect(self.home/'state_6.sqlite') as db:
+   db.execute('create table threads(id text,rollout_path text,title text,cwd text)')
+   db.execute('insert into threads values(?,?,?,?)',(ID,str(self.path),'另一个名称','/projects/Other'))
+  info=context.RequestContext(self.home).call_contexts([sample],'one')['one']
+  self.assertNotIn('projectPath',info);self.assertNotIn('conversationTitle',info)
+  self.assertEqual(info['content'][0]['text'],'结果')
+ def test_old_state_schema_still_resolves_without_inventing_metadata(self):
+  self.message(1000,'要求');self.assistant(1004,'结果')
+  with sqlite3.connect(self.home/'state_5.sqlite') as db:
+   db.execute('create table threads(id text,rollout_path text)')
+   db.execute('insert into threads values(?,?)',(ID,str(self.path)))
+  info=context.RequestContext(self.home).call_contexts([self.sample('one',1001,1005)],'one')['one']
+  self.assertNotIn('projectPath',info);self.assertNotIn('conversationTitle',info)
+  self.assertEqual(info['message'],'要求')
+ def test_missing_and_overlapping_output_has_an_evidence_reason(self):
+  self.message(1000,'要求');self.assistant(1004,'结果')
+  one=self.sample('one',1001,1005);two=self.sample('two',1002,1006)
+  resolver=context.RequestContext(self.home)
+  info=resolver.call_contexts([one,two],'one')['one']
+  self.assertEqual(info['associationIssue'],'overlap');self.assertEqual(info['content'],[])
+  info=resolver.call_contexts([self.sample('missing',1001,1005,'missing')],'missing')['missing']
+  self.assertEqual(info['associationIssue'],'no_rollout')
+
  def test_first_sentence_ignores_attachment_metadata_and_environment(self):
   resolver=self.fixture()
   self.assertEqual(resolver.preview(ID,1009),'帮我检查这个项目。')

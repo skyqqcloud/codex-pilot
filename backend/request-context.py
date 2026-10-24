@@ -38,6 +38,28 @@ def source_context(kind):
     return dict(sourceKind=kind, sourceTitle=title, sourceDescription=description,
                 outputPreview=title, outputKind=kind)
 
+def thread_metadata(home, conversations):
+    """Read bounded, exact-ID display metadata. Never scan conversation text."""
+    ids=sorted({id for id in conversations if isinstance(id,str) and id})
+    candidates={}
+    for database in sorted(Path(home).glob('state_*.sqlite')):
+        try:
+            with closing(sqlite3.connect(database.resolve().as_uri()+'?mode=ro',uri=True,timeout=.25)) as connection:
+                columns={row[1] for row in connection.execute('pragma table_info(threads)')}
+                title='title' if 'title' in columns else 'NULL'
+                cwd='cwd' if 'cwd' in columns else 'NULL'
+                for offset in range(0,len(ids),400):
+                    batch=ids[offset:offset+400]
+                    for id,name,project in connection.execute('select id,'+title+','+cwd+' from threads where id in ('+
+                                                              ','.join('?' for _ in batch)+')',batch):
+                        item={key:value for key,value in [('conversationTitle',name),('projectPath',project)]
+                              if isinstance(value,str) and value.strip()}
+                        if item:candidates.setdefault(id,[]).append(item)
+        except (sqlite3.Error,OSError):continue
+    return {id:{key:values[0][key] for key in ('conversationTitle','projectPath')
+                if key in values[0] and all(value.get(key)==values[0][key] for value in values)}
+            for id,values in candidates.items()}
+
 def suggestion_sources(home, samples):
     """Only called for conversations without rollouts; never export their internal prompts."""
     database = Path(home) / 'logs_2.sqlite'
@@ -336,10 +358,11 @@ class RequestContext:
             for p in (self.home/folder).rglob('*.jsonl'):
                 m=UUID.search(p.name)
                 if m:paths.setdefault(m.group(),set()).add(p)
-        for db in self.home.glob('state_*.sqlite'):
+        for db in sorted(self.home.glob('state_*.sqlite')):
             try:
                 with sqlite3.connect('file:'+str(db)+'?mode=ro',uri=True) as c:
                     for id,path in c.execute('select id,rollout_path from threads'):
+                        if not isinstance(path,str):continue
                         p=Path(path)
                         if p.exists():paths.setdefault(id,set()).add(p)
             except (sqlite3.Error,OSError):pass
@@ -414,6 +437,7 @@ class RequestContext:
             if sample.get('conversationID'):
                 by_conversation.setdefault(sample['conversationID'], []).append(sample)
         result = {}
+        metadata = thread_metadata(self.home,by_conversation)
         source_info = suggestion_sources(self.home, [sample for calls in by_conversation.values()
             for sample in calls if not self.paths.get(sample['conversationID'])])
         for conversation, calls in by_conversation.items():
@@ -480,7 +504,7 @@ class RequestContext:
                 user = max(eligible, key=lambda u: u['time']) if eligible else None
                 if user and any(user['time'] <= when < start and t == user['turn'] for when, t in ended):
                     user = None  # A completed task's user message is not the next background task's parent.
-                info = {}
+                info = dict(metadata.get(conversation,{}))
                 if user:
                     identity = '%s:%s:%.6f' % (conversation, user['turn'] or '', user['time'])
                     info.update(groupID=hashlib.sha256(identity.encode()).hexdigest(),
@@ -512,7 +536,11 @@ class RequestContext:
                     tools = list(dict.fromkeys(part['name'] for part in content if part['kind'] == 'tool'))
                     preview = sentence(messages[0]) if messages else '调用 ' + '、'.join(tools)
                     info.update(outputPreview=preview, outputKind='output' if messages else 'tool')
-                if sample['id'] == full_id: info['content'] = content
+                if sample['id'] == full_id:
+                    info['content'] = content
+                    if not info.get('sourceKind') and (not user or not content):
+                        info['associationIssue'] = ('overlap' if overlaps else 'no_rollout' if not self.paths.get(conversation)
+                                                    else 'no_user' if not user else 'no_output')
                 if info: result[sample['id']] = info
         return result
 

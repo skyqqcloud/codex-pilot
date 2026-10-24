@@ -17,6 +17,8 @@ struct RequestSpeedSample: Codable, Identifiable, Sendable, Equatable {
     var promptPreview: String? = nil
 
     var isFast: Bool { serviceTier == "priority" || serviceTier == "fast" }
+    // A presentation key only. Keep the API model and raw counters intact.
+    var statisticsModel: String { model + (isFast ? "::fast" : "") }
 
     // Keep the API's original total and reasoning counts. TPS measures only
     // non-reasoning output; its duration must describe the same output phase.
@@ -77,8 +79,8 @@ struct RequestSpeedSnapshot: Codable, Sendable, Equatable {
         let valid = samples.filter(\.valid).sorted {
             $0.completedAt == $1.completedAt ? $0.id > $1.id : $0.completedAt > $1.completedAt
         }
-        modelNames = Array(Set(valid.map(\.model))).sorted()
-        var buckets = Dictionary(grouping: valid, by: \.model)
+        modelNames = Array(Set(valid.map(\.statisticsModel))).sorted()
+        var buckets = Dictionary(grouping: valid, by: \.statisticsModel)
         buckets[""] = valid
         var ordered: [String: [RequestSpeedSample]] = [:]
         var histories: [String: [RequestSpeedSample]] = [:]
@@ -88,8 +90,8 @@ struct RequestSpeedSnapshot: Codable, Sendable, Equatable {
             ordered[model] = unique
             var counts: [String: Int] = [:]
             histories[model] = unique.filter { sample in
-                guard counts[sample.model, default: 0] < 100 else { return false }
-                counts[sample.model, default: 0] += 1
+                guard counts[sample.statisticsModel, default: 0] < 100 else { return false }
+                counts[sample.statisticsModel, default: 0] += 1
                 return true
             }
         }

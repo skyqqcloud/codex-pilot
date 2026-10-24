@@ -3,11 +3,20 @@ import ServiceManagement
 
 struct SettingsPanel: View {
     @ObservedObject var store: SwapStore
+    var showStatus: () -> Void = {}
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let palette = PanelPalette(scheme: scheme)
         VStack(alignment: .leading, spacing: 0) {
+            Button(action: showStatus) {
+                HStack {
+                    Label(L10n.string("运行状态与首次使用"), systemImage: "checklist")
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.system(size: 10))
+                }.padding(.vertical, 11)
+            }.buttonStyle(PanelButtonStyle(cornerRadius: 6)).accessibilityIdentifier("open-run-status")
+            Divider()
             HStack {
                 Text(L10n.string("登录时启动"))
                 Spacer()
@@ -59,6 +68,18 @@ struct SettingsPanel: View {
                 Text(error).font(.system(size: 11)).foregroundStyle(palette.amber).padding(.top, 8)
             }
             sectionLabel(L10n.string("账号额度自动刷新"))
+            HStack {
+                Text(L10n.string("低额度提醒"))
+                Spacer()
+                Toggle(L10n.string("低额度提醒"), isOn: Binding(get: { store.lowQuotaAlerts },
+                    set: { enabled in Task { await store.setLowQuotaAlerts(enabled) } }))
+                    .labelsHidden().toggleStyle(.switch).controlSize(.small)
+                    .accessibilityIdentifier("low-quota-alerts")
+            }.padding(.vertical, 11)
+            Text(L10n.string("当前账号联网刷新后，剩余额度不超过 10% 时提醒。同一额度周期仅提醒一次。"))
+                .font(.system(size: 11)).foregroundStyle(palette.secondary)
+                .fixedSize(horizontal: false, vertical: true).padding(.bottom, 8)
+            Divider()
             ForEach(store.slots) { row in
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {

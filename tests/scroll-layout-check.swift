@@ -47,6 +47,80 @@ struct NaturalDetailFixture: View {
 @main
 @MainActor
 struct ScrollLayoutCheck {
+    static func checkVersion3(store: SwapStore, base: URL) async throws {
+        store.selectedModel = "gpt-6.1-sol::fast"
+        precondition(store.recentSpeeds.count == 2 && store.averageSpeed == 140 && store.latestSpeed?.rate == 90,
+                     "native Fast picker mixes standard and Fast samples")
+        precondition(PanelFormat.model(store.selectedModel) == "gpt-6.1-sol · Fast", "virtual model key leaks into UI")
+        store.selectedModel = "gpt-6.1-sol"
+        precondition(store.averageSpeed == 62 && store.latestSpeed?.rate == 80, "standard statistics changed")
+        let sample = store.latestSpeed!
+        let context = store.requestContexts[sample.id]!
+        precondition(context.projectPath == "/projects/Codex Pilot" && context.conversationTitle == "Native layout checks",
+                     "exact project/conversation metadata was not surfaced")
+        precondition(RequestBrowseFilter(projectPath: "/projects/Codex Pilot", query: "Native layout").matches(sample, context: context),
+                     "project and title search do not combine")
+        precondition(!RequestBrowseFilter(projectPath: "/projects/Other").matches(sample, context: context) &&
+                     !RequestBrowseFilter(source: "suggestion").matches(sample, context: context), "filters fabricate provenance")
+        precondition(RequestBrowseFilter(source: "conversation").matches(sample, context: context) &&
+                     !RequestBrowseFilter(projectPath: "/projects/Codex Pilot").matches(sample, context: nil), "unknown source is assigned a project")
+        precondition(RequestCallContext(associationIssue: "overlap").associationExplanation != nil,
+                     "association evidence reason missing")
+        for scheme in [ColorScheme.light, .dark] {
+            let state = RequestBrowserState()
+            let root = NSHostingView(rootView: RequestBrowserView(store: store, state: state).environment(\.colorScheme, scheme))
+            root.setFrameSize(NSSize(width: 1000, height: 720))
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 720), styleMask: [.titled], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = root
+            window.orderFront(nil)
+            for _ in 0..<20 {
+                root.layoutSubtreeIfNeeded()
+                try await Task.sleep(nanoseconds: 10_000_000)
+            }
+            let tables = findScrolls(root).compactMap { $0.documentView as? NSTableView }
+            precondition(tables.count == 1 && tables[0].numberOfRows == 99, "wide history lost default collapsed groups")
+            precondition(tables[0].frame.width >= 340, "wide virtual rows have invalid width")
+            state.query = "NO_MATCH_FOR_ANY_CALL"
+            await Task.yield(); root.layoutSubtreeIfNeeded()
+            precondition(findScrolls(root).compactMap { $0.documentView as? NSTableView }.isEmpty, "empty search retained unrelated rows")
+            state.query = ""; state.project = "/projects/Codex Pilot"
+            await Task.yield(); root.layoutSubtreeIfNeeded()
+            let filtered = findScrolls(root).compactMap { $0.documentView as? NSTableView }
+            precondition(filtered.first?.numberOfRows == 2, "project filtering did not preserve the two user-message groups")
+            for _ in 0..<20 {
+                try await Task.sleep(nanoseconds: 10_000_000)
+                root.layoutSubtreeIfNeeded()
+            }
+            let image = root.bitmapImageRepForCachingDisplay(in: root.bounds)!
+            root.cacheDisplay(in: root.bounds, to: image)
+            try image.representation(using: .png, properties: [:])!.write(to: base.appendingPathComponent("browser-\(scheme).png"))
+            window.contentView = nil; window.close()
+            let status = NSHostingView(rootView: RunStatusPanel(store: store).frame(width: 380).environment(\.colorScheme, scheme))
+            status.setFrameSize(NSSize(width: 380, height: 650)); status.layoutSubtreeIfNeeded()
+            await Task.yield()
+            precondition(status.fittingSize.height > 300 && status.fittingSize.width <= 381, "status page has invalid bounds")
+        }
+        RequestBrowserWindow.show(store: store)
+        precondition(RequestBrowserWindow.isOpen, "details window did not open")
+        RequestBrowserWindow.show(store: store)
+        let windows = NSApp.windows.filter { $0.identifier?.rawValue == "request-browser" }
+        precondition(windows.count == 1, "opening twice duplicated the details window")
+        windows[0].close()
+        precondition(!RequestBrowserWindow.isOpen && windows[0].contentView == nil, "closing retains observed views")
+        let original = store.currentRow!
+        let quota = SlotQuota(five: 9, fiveWhen: "", fiveResetAt: 1000, week: 50, weekWhen: "", weekResetAt: 2000, fetchedAt: 1)
+        let low = original.withQuota(quota)
+        precondition(LowQuotaAlerts.cycles(low).count == 1 && LowQuotaAlerts.cycles(original).isEmpty,
+                     "low-quota thresholds use unknown values or the wrong account")
+        let weekly = original.withQuota(SlotQuota(five: 50, fiveWhen: "", fiveResetAt: 1000, week: 9, weekWhen: "", weekResetAt: 2000, fetchedAt: 1))
+        let nextFive = weekly.withQuota(SlotQuota(five: 100, fiveWhen: "", fiveResetAt: 3000, week: 9, weekWhen: "", weekResetAt: 2000, fetchedAt: 2))
+        precondition(LowQuotaAlerts.cycles(weekly) == LowQuotaAlerts.cycles(nextFive), "five-hour reset repeats a weekly quota alert")
+        precondition(!store.lowQuotaAlerts, "notifications enabled without user opt-in")
+        store.selectedModel = "gpt-6.1-sol"
+        print("3.0: isolated Fast statistics, exact project filters, search, light/dark two-pane views, window release, readiness and opt-in alerts passed.")
+    }
+
     static func main() async throws {
         setbuf(stdout, nil)
         _ = NSApplication.shared
@@ -81,6 +155,7 @@ struct ScrollLayoutCheck {
         try await checkHistoryPreparation(store: store, base: base)
         try await checkEnergyObserver(base: base)
         try await checkProcessPriorities(store: store, base: base)
+        try await checkVersion3(store: store, base: base)
         precondition(PanelFormat.tokens(109114) == "109,114", "token counts are not grouped")
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

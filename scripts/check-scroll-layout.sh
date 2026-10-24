@@ -63,8 +63,8 @@ with sqlite3.connect(root / 'fixtures/logs_2.sqlite') as db:
     db.execute('insert into logs values (?,?,?,?,?)', (int(t),round((t-int(t))*1e9),
         samples[-1]['conversationID'],'codex_core::session::handlers',
         'Submission sub=Submission { id: "suggestion", op: TurnInput { request: TurnInputRequest { input: UserInput { content: [Text { text: "This is an app-generated request for a suggested next user message. PRIVATE_INSTRUCTIONS'))
-samples[0]['serviceTier'] = 'priority'
-samples[1]['serviceTier'] = 'fast'
+samples[0]['serviceTier'] = 'default'
+samples[1]['serviceTier'] = 'default'
 samples[0]['promptPreview'] = '统计详情按钮小了一点，这个挺常用的'
 samples[1]['promptPreview'] = '帮我检查这个项目。'
 conversation = '019f0000-1111-7000-8000-000000000001'
@@ -103,6 +103,14 @@ samples += [dict(id=str(index),model='gpt-6.1-sol',completedAt=stamp-index*20,
                  outputTokens=index,durationSeconds=10,inputTokens=10000,
                  cachedTokens=1000,reasoningTokens=0,ttftSeconds=1.5)
             for index in range(5,120)]
+samples += [dict(id='fast-'+str(i),model='gpt-6.1-sol',completedAt=stamp-130-i,
+                 outputTokens=rate*10+100,durationSeconds=10,nonReasoningDurationSeconds=10,
+                 inputTokens=10000,cachedTokens=8000,reasoningTokens=100,ttftSeconds=.5,serviceTier=tier)
+            for i,(rate,tier) in enumerate([(90,'priority'),(190,'fast')])]
+with sqlite3.connect(root / 'fixtures/state_5.sqlite') as db:
+    db.execute('create table if not exists threads(id text,rollout_path text,title text,cwd text)')
+    db.execute('delete from threads')
+    db.execute('insert into threads values(?,?,?,?)',(conversation,str(sessions / ('rollout-'+conversation+'.jsonl')),'Native layout checks','/projects/Codex Pilot'))
 (root / 'fixtures/speeds.json').write_text(json.dumps(dict(samples=samples)))
 PY
 cp -R "$ROOT/app/Resources/"*.lproj "$CHECK_BUILD/Checker.app/Contents/Resources/"

@@ -6,6 +6,9 @@ import SwiftUI
 struct RequestHistoryList<Row: View>: NSViewRepresentable {
     let ids: [String]
     let onSelect: (String) -> Void
+    var width: CGFloat = PanelLayout.width
+    var viewportHeight: CGFloat = PanelLayout.requestHistoryHeight
+    var selection: String? = nil
     let row: (Int) -> Row
     @Environment(\.colorScheme) private var scheme
 
@@ -20,7 +23,7 @@ struct RequestHistoryList<Row: View>: NSViewRepresentable {
         scroll.autohidesScrollers = true
         scroll.scrollerStyle = .overlay
         scroll.horizontalScrollElasticity = .none
-        let table = RequestTableView(frame: NSRect(x: 0, y: 0, width: PanelLayout.width, height: 0))
+        let table = RequestTableView(frame: NSRect(x: 0, y: 0, width: width, height: 0))
         table.style = .plain
         table.autoresizingMask = [.width]
         table.headerView = nil
@@ -30,9 +33,9 @@ struct RequestHistoryList<Row: View>: NSViewRepresentable {
         table.rowHeight = PanelLayout.requestRowHeight
         table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("request"))
-        column.width = PanelLayout.width
-        column.minWidth = PanelLayout.width
-        column.maxWidth = PanelLayout.width
+        column.width = width
+        column.minWidth = width
+        column.maxWidth = width
         table.addTableColumn(column)
         table.delegate = context.coordinator
         table.dataSource = context.coordinator
@@ -49,26 +52,34 @@ struct RequestHistoryList<Row: View>: NSViewRepresentable {
         scroll.appearance = appearance
         table.appearance = appearance
         scroll.scrollerKnobStyle = scheme == .dark ? .light : .dark
-        scroll.hasVerticalScroller = CGFloat(ids.count) * PanelLayout.requestRowHeight > PanelLayout.requestHistoryHeight
+        scroll.hasVerticalScroller = CGFloat(ids.count) * PanelLayout.requestRowHeight > viewportHeight
         let origin = scroll.contentView.bounds.origin
         if changed { table.reloadData() }
-        table.setFrameSize(NSSize(width: PanelLayout.width,
+        if let column = table.tableColumns.first {
+            column.minWidth = width; column.maxWidth = width; column.width = width
+        }
+        table.setFrameSize(NSSize(width: width,
                                   height: CGFloat(ids.count) * PanelLayout.requestRowHeight))
         let visible = table.rows(in: table.visibleRect)
         if visible.location != NSNotFound {
             for index in visible.location..<min(ids.count, NSMaxRange(visible)) {
                 if let cell = table.view(atColumn: 0, row: index, makeIfNecessary: false) as? HistoryCell<Row> {
-                    cell.setContent(row(index).environment(\.colorScheme, scheme))
+                    cell.setContent(row(index).environment(\.colorScheme, scheme), width: width)
                 }
             }
         }
         let bottom = max(0, table.frame.height - scroll.contentView.bounds.height)
         scroll.contentView.scroll(to: NSPoint(x: 0, y: min(origin.y, bottom)))
+        if context.coordinator.lastSelection != selection, let selection, let index = ids.firstIndex(of: selection) {
+            table.scrollRowToVisible(index)
+        }
+        context.coordinator.lastSelection = selection
         scroll.reflectScrolledClipView(scroll.contentView)
     }
 
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         var parent: RequestHistoryList
+        var lastSelection: String?
         init(parent: RequestHistoryList) { self.parent = parent }
         func numberOfRows(in tableView: NSTableView) -> Int { parent.ids.count }
         func tableViewSelectionDidChange(_ notification: Notification) {
@@ -77,10 +88,12 @@ struct RequestHistoryList<Row: View>: NSViewRepresentable {
             parent.onSelect(parent.ids[table.selectedRow])
         }
         func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+            // AppKit can ask for an old visible row during a shrinking reload.
+            guard parent.ids.indices.contains(row) else { return nil }
             let identifier = NSUserInterfaceItemIdentifier("request-cell")
             let cell = tableView.makeView(withIdentifier: identifier, owner: nil) as? HistoryCell<Row> ?? HistoryCell<Row>()
             cell.identifier = identifier
-            cell.setContent(parent.row(row).environment(\.colorScheme, parent.scheme))
+            cell.setContent(parent.row(row).environment(\.colorScheme, parent.scheme), width: parent.width)
             return cell
         }
     }
@@ -96,8 +109,8 @@ private final class RequestTableView: NSTableView {
 
 private final class HistoryCell<Row: View>: NSTableCellView {
     private var host: NSHostingView<AnyView>?
-    func setContent<Content: View>(_ content: Content) {
-        let root = AnyView(content.frame(width: PanelLayout.width, height: PanelLayout.requestRowHeight))
+    func setContent<Content: View>(_ content: Content, width: CGFloat) {
+        let root = AnyView(content.frame(width: width, height: PanelLayout.requestRowHeight))
         if let host { host.rootView = root }
         else {
             let host = NSHostingView(rootView: root)

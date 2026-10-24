@@ -28,6 +28,19 @@ struct RequestCallContext: Codable, Sendable, Hashable {
     var sourceKind: String?
     var sourceTitle: String?
     var sourceDescription: String?
+    var conversationTitle: String?
+    var projectPath: String?
+    var associationIssue: String?
+
+    var associationExplanation: String? {
+        switch associationIssue {
+        case "overlap": return L10n.string("同一对话的调用时间重叠，无法可靠对应输出。")
+        case "no_rollout": return L10n.string("未找到这次调用对应的本地对话文件，可能是未保存普通对话的后台调用。")
+        case "no_user": return L10n.string("已找到对话记录，但无法确认这次调用对应的用户消息。")
+        case "no_output": return L10n.string("已找到发起消息，但本地尚无可可靠关联的输出记录。")
+        default: return nil
+        }
+    }
 
     var displaySourceDescription: String? { sourceDescription.map(L10n.key) }
 
@@ -72,6 +85,25 @@ struct RequestPresentationSnapshot: Sendable, Equatable {
     var speeds = RequestSpeedSnapshot()
     var contexts: [String: RequestCallContext] = [:]
     var ready = false
+}
+
+struct RequestBrowseFilter {
+    var projectPath = ""
+    var conversationID = ""
+    var query = ""
+    var source = ""
+
+    func matches(_ sample: RequestSpeedSample, context: RequestCallContext?) -> Bool {
+        if !projectPath.isEmpty && context?.projectPath != projectPath { return false }
+        if !conversationID.isEmpty && sample.conversationID != conversationID { return false }
+        let kind = context?.sourceKind ?? (context?.groupID == nil ? "unknown" : "conversation")
+        if !source.isEmpty && source != kind { return false }
+        let words = query.split(whereSeparator: \.isWhitespace).map(String.init)
+        let text = [sample.model, context?.conversationTitle, context?.projectPath,
+                    context?.groupPreview, context?.outputPreview,
+                    context?.sourceTitle].compactMap { $0 }.joined(separator: "\n")
+        return words.allSatisfy { text.localizedStandardContains($0) }
+    }
 }
 
 struct RequestHistoryGroup: Identifiable {

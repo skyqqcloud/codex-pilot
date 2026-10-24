@@ -29,6 +29,10 @@ final class SwapStore: ObservableObject {
     @Published private(set) var requestPresentation = RequestPresentationSnapshot()
     @Published private(set) var captureEnabled = false
     @Published private(set) var captureError: String?
+    @Published private(set) var captureProcessRunning = false
+    @Published private(set) var captureChangedAt: Date?
+    @Published private(set) var lowQuotaAlerts = false
+    @Published private(set) var quotaError: String?
     @Published private(set) var selectedRequestID: String?
     @Published private(set) var contextRevision = 0
     @Published var selectedModel: String { didSet { selectedRequestID = nil; defaults.set(selectedModel, forKey: "ThroughputModel") } }
@@ -57,6 +61,8 @@ final class SwapStore: ObservableObject {
 
     init(defaults: UserDefaults = .standard, scanner: SessionScanner = SessionScanner(), speedFile: URL? = nil) {
         self.defaults = defaults
+        captureChangedAt = defaults.object(forKey: "CaptureChangedAt3") as? Date
+        lowQuotaAlerts = defaults.bool(forKey: "LowQuotaAlerts3")
         codexHome = scanner.codexHome
         self.speedFile = speedFile ?? TelemetryCapture.samplesURL
         capture = speedFile == nil ? TelemetryCapture() : nil
@@ -123,12 +129,17 @@ final class SwapStore: ObservableObject {
     var menuBarText: String { latestSpeed?.rate.map { String(format: "%.1f t/s", $0) } ?? "— t/s" }
     var menuBarQuota: MenuBarQuota { MenuBarQuota(account: currentRow) }
     var menuBarHelp: String {
-        let model = selectedModel.isEmpty ? L10n.string("全部模型") : selectedModel
+        let model = selectedModel.isEmpty ? L10n.string("全部模型") : PanelFormat.model(selectedModel)
         let speed = L10n.string("最近一次输出（\(model)）：\(menuBarText)")
         guard let row = currentRow else { return L10n.string("Codex Pilot\n\(speed)\n未找到已保存的当前激活账号") }
         return L10n.string("Codex Pilot\n\(speed)\n当前账号：\(row.planTitle) · \(row.email)\n\(menuBarQuota.help)")
     }
     var lastFetchedAt: Date? { slots.compactMap(\.fetchedAt).max().map(Date.init(timeIntervalSince1970:)) }
+    var lastCapturedAt: Date? { requestSpeeds.latest(model: "").map { Date(timeIntervalSince1970: $0.completedAt) } }
+    var captureNeedsVerification: Bool {
+        captureEnabled && (lastCapturedAt == nil || captureChangedAt.map { $0 > (lastCapturedAt ?? .distantPast) } == true)
+    }
+    var needsSetup: Bool { throughputLoaded && (!hasLiveAuth || !captureEnabled || captureNeedsVerification) }
 
     func refreshThroughput(retryUnresolved: Bool = false) async {
         if let throughputTask {
@@ -161,6 +172,7 @@ final class SwapStore: ObservableObject {
         do {
             if let capture {
                 try capture.start()
+                captureProcessRunning = capture.isRunning
                 let enabled = TelemetryCapture.isConfigured(home: codexHome)
                 if captureEnabled != enabled { captureEnabled = enabled }
             } else if !captureEnabled { captureEnabled = true }
@@ -265,6 +277,7 @@ final class SwapStore: ObservableObject {
     }
 
     private func scheduleCollectorRestart() {
+        captureProcessRunning = false
         captureError = collectorRestartAttempt < 3 ? L10n.string("本机采集器已退出，正在重试…") : L10n.string("本机采集器多次退出，请重新打开面板重试。")
         guard collectorRestartTask == nil, collectorRestartAttempt < 3 else { return }
         let delay = [2, 10, 60][collectorRestartAttempt]
@@ -279,7 +292,12 @@ final class SwapStore: ObservableObject {
 
     func setCaptureEnabled(_ enabled: Bool) async {
         do {
+            let previous = captureEnabled
             captureEnabled = try await Task.detached(priority: .userInitiated) { try TelemetryCapture.configure(enabled ? "enable" : "disable") }.value
+            if captureEnabled != previous {
+                captureChangedAt = Date()
+                defaults.set(captureChangedAt, forKey: "CaptureChangedAt3")
+            }
             captureError = nil
             notify(L10n.string("测速设置已更新，重启 Codex 后生效"))
         } catch { captureError = error.localizedDescription }
@@ -317,6 +335,29 @@ final class SwapStore: ObservableObject {
     func refreshAllFetched() async { await fetchQuotas(names: slots.map(\.name), silent: false) }
     func refreshSlot(_ name: String) async { await fetchQuotas(names: [name], silent: false) }
 
+    func setLowQuotaAlerts(_ enabled: Bool) async {
+        if !enabled {
+            lowQuotaAlerts = false; defaults.set(false, forKey: "LowQuotaAlerts3"); return
+        }
+        guard await LowQuotaAlerts.requestPermission() else {
+            errorMessage = L10n.string("通知未获允许，可在系统设置中允许 Codex Pilot 发送通知。")
+            return
+        }
+        lowQuotaAlerts = true
+        defaults.set(true, forKey: "LowQuotaAlerts3")
+    }
+
+    func restartCodexForCapture() async {
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
+        let stopped = await Task.detached(priority: .userInitiated) { DesktopClient.quit() }.value
+        guard stopped else { errorMessage = L10n.string("Codex 尚未退出，请结束当前工作后重试。"); return }
+        let opened = await Task.detached(priority: .userInitiated) { DesktopClient.open() }.value
+        if opened { notify(L10n.string("Codex 已重新打开，完成新调用后验证采集。")) }
+        else { errorMessage = L10n.string("未能打开 Codex，请手动打开后重试。") }
+    }
+
     private func fetchQuotas(names: [String], silent: Bool) async {
         guard !busy, !names.isEmpty, !needsSave else { return }
         busy = true
@@ -328,16 +369,22 @@ final class SwapStore: ObservableObject {
             for index in slots.indices {
                 if let quota = batch.quotas[slots[index].name] { slots[index] = slots[index].withQuota(quota) }
             }
+            if lowQuotaAlerts, let row = currentRow, batch.quotas[row.name]?.fresh == true, !batch.failed.contains(row.name) {
+                await LowQuotaAlerts.deliverIfNeeded(row, defaults: defaults)
+            }
             if let active = slots.first(where: { $0.active }) { livePlan = active.plan }
             if batch.failed.isEmpty {
+                quotaError = nil
                 errorMessage = nil
                 if !silent { notify(L10n.string("账号额度已刷新")) }
             } else {
                 errorMessage = L10n.string("\(batch.failed.count) 个账号未获取到新额度，仍显示上次数据。")
+                quotaError = errorMessage
                 if !silent { status = "" }
             }
         } catch {
             errorMessage = error.localizedDescription
+            quotaError = errorMessage
             if !silent { status = "" }
         }
     }

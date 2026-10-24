@@ -45,11 +45,38 @@ struct TelemetryChecks {
         try nonReasoningRequestSpeeds()
         try speedIntegrityBoundaries()
         try indexedSpeedsPreserveResults()
-        print("Telemetry: 13 checks passed, including indexed all-model results, latest/last-five request speeds and insufficient/invalid samples.")
+        try fastModelIsolation()
+        print("Telemetry: 14 checks passed, including indexed all-model results, latest/last-five request speeds and insufficient/invalid samples.")
         if CommandLine.arguments.contains("--live") {
             let snapshot = await SessionScanner().refreshByModel()
             print("Live collection: \(snapshot.aggregate.status.rawValue); models: \(snapshot.modelNames.count); malformed structural records: \(snapshot.aggregate.malformedRelevantLines)")
         }
+    }
+
+    static func fastModelIsolation() throws {
+        var samples: [RequestSpeedSample] = []
+        for index in 0..<150 {
+            for tier in ["default", "fast", "priority", "auto"] {
+                var sample = RequestSpeedSample(id: "\(tier)-\(index)", model: "same-model", completedAt: Double(index + 100),
+                    outputTokens: tier == "fast" || tier == "priority" ? 210 : 110,
+                    durationSeconds: 2, inputTokens: 1000, reasoningTokens: 10, cachedTokens: 900,
+                    ttftSeconds: 1, nonReasoningDurationSeconds: 2, serviceTier: tier)
+                if tier == "auto" { sample.serviceTier = nil }
+                samples.append(sample)
+            }
+        }
+        let snapshot = RequestSpeedSnapshot(samples: samples + samples)
+        try expect(snapshot.modelNames == ["same-model", "same-model::fast"], "Fast did not become a separate statistical model")
+        try expect(snapshot.average(model: "same-model") == 50 && snapshot.average(model: "same-model::fast") == 100,
+                   "Fast and unmarked calls leaked into each other's averages")
+        try expect(snapshot.history(model: "same-model").count == 100 && snapshot.history(model: "same-model::fast").count == 100 &&
+                   snapshot.history(model: "").count == 200, "per-variant retention or all-model union is wrong")
+        try expect(snapshot.history(model: "same-model::fast").allSatisfy { $0.isFast && $0.model == "same-model" },
+                   "virtual model key overwrote the real API model")
+        let data = try JSONEncoder().encode(snapshot)
+        let decoded = try JSONDecoder().decode(RequestSpeedSnapshot.self, from: data)
+        try expect(decoded == snapshot && decoded.samples == samples + samples, "migration changed raw sample accounting")
+        try expect(decoded.average(model: "") == snapshot.average(model: ""), "all-model arithmetic changed")
     }
 
     static func accountingAndDedup() throws {

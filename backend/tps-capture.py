@@ -78,7 +78,7 @@ def load_samples(path):
 def retained_samples(samples):
     counts, seen, result = {}, set(), []
     for sample in sorted(samples, key=lambda s:(s['completedAt'],s['id']), reverse=True):
-        model = sample['model']
+        model = (sample['model'], sample.get('serviceTier') in ('fast', 'priority'))
         if sample['id'] in seen or counts.get(model,0) >= HISTORY_PER_MODEL: continue
         seen.add(sample['id'])
         counts[model] = counts.get(model,0)+1

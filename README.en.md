@@ -15,7 +15,7 @@
   <a href="https://github.com/skyqqcloud/codex-pilot/issues">Report an issue</a>
 </p>
 
-Codex Pilot is a native macOS utility for **API output speed, account switching, and remaining quotas**. Built with SwiftUI and AppKit, it lives in the menu bar without a separate main window or Dock icon.
+Codex Pilot is a native macOS utility for **API output speed, account switching, and remaining quotas**. Built with SwiftUI and AppKit, it lives in the menu bar, with an optional details window and no Dock icon.
 
 This is an independent community project, not affiliated with OpenAI.
 
@@ -34,8 +34,10 @@ The app supports English and Simplified Chinese and follows your macOS language.
 | Feature | What it shows |
 | --- | --- |
 | **Two-line menu bar** | The selected model's latest TPS above the active account's remaining quota. Check both without opening the panel. |
-| **Per-call measurements** | Latest-request and recent-five average rates, with up to 100 captured requests retained per model. |
+| **Per-call measurements** | Latest-request and recent-five average rates, with standard and Fast entries measured separately and up to 100 captured requests retained per entry. |
 | **Conversation groups** | Each initiating message appears once. Follow-up calls are collapsed by default; expand them for individual output or tool summaries, models, Fast labels, TPS, and usage. |
+| **Details window** | Filter by project, conversation, source, and preview text. Resize or pin a two-pane view of calls and full content. |
+| **Status and setup** | Check login, capture configuration, receiver process, captured calls, and quota refresh with relevant actions. |
 | **Multiple accounts** | Save, reorder, and switch logins. Refresh plans and quotas, with optional five-minute refreshes per account. |
 
 File-change notifications, coalesced refreshes, incremental history reads, reusable workers, and separate background/interactive priorities reduce redundant work.
@@ -75,6 +77,8 @@ For another account, choose **Add account…**, follow the Codex sign-in flow, a
 
 **Switching accounts quits and reopens Codex; finish your current work first.** Pilot requests a normal quit before replacing the login file. If quitting fails or is cancelled, it keeps the original login.
 
+Choose **Open in window** in speed details for project and conversation filters. A `model · Fast` entry contains only calls explicitly marked `fast` or `priority`; records without tier metadata stay in the unmarked entry. Low quota alerts are optional and apply to freshly refreshed quotas for the active account.
+
 ## How is TPS calculated?
 
 TPS means tokens per second. Pilot measures the **client-observed non-reasoning output-stage rate**:
@@ -90,7 +94,7 @@ Timing comes from Codex's official OpenTelemetry events and local output logs. I
 <details>
 <summary>Averages, missing values, and Fast labels</summary>
 
-- **Recent-five average:** take the five most recent captured completions for the selected model, then average the valid rates within that window. Missing values are not zero, and older requests do not fill the gaps.
+- **Recent-five average:** standard and Fast entries have separate windows. Take the five most recent captured completions for the selected entry, then average the valid rates within that window. Missing values are not zero, and older requests do not fill the gaps.
 - **Unknown values (`—`):** missing or ambiguous timing is never estimated. Requests made while capture was disabled cannot be reconstructed.
 - **High rates on short outputs:** output arriving in a burst can produce a large ratio. Verifiable observations are kept without an artificial cap; they do not establish a sustained generation rate.
 - **Output-stage boundaries:** later reasoning, buffering, or client delays may remain within the measured interval. A faster overall task does not necessarily have a proportionally higher TPS.

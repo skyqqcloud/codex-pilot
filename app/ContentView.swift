@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-private enum PanelPage { case main, stats, settings, manage }
+private enum PanelPage { case main, stats, settings, manage, health }
 private enum PanelConfirmation: Identifiable {
     case switchAccount(SlotRow), deleteAccount(SlotRow), addAccount, returnToPrevious
     var id: String {
@@ -42,7 +42,8 @@ struct ContentView: View {
                     BoundedPanelScrollView(maximumHeight: maximumHeight - 50) {
                         VStack(spacing: 0) {
                             if let error = store.errorMessage { message(error, error: true) }
-                            if page == .settings { SettingsPanel(store: store) }
+                            if page == .health { RunStatusPanel(store: store) }
+                            else if page == .settings { SettingsPanel(store: store, showStatus: { page = .health }) }
                             else { managementPanel }
                         }
                         .onExitCommand { page = .main }
@@ -79,9 +80,16 @@ struct ContentView: View {
                 }.buttonStyle(PanelButtonStyle(cornerRadius: 6))
                     .accessibilityLabel(L10n.string("返回")).accessibilityIdentifier("panel-back")
             }
-            Text(page == .main ? "Codex Pilot" : page == .settings ? L10n.string("设置") : page == .stats ? L10n.string("输出测速") : L10n.string("管理账号"))
+            Text(page == .main ? "Codex Pilot" : page == .health ? L10n.string("运行状态") : page == .settings ? L10n.string("设置") : page == .stats ? L10n.string("输出测速") : L10n.string("管理账号"))
                 .font(.system(size: 14, weight: .semibold))
             Spacer()
+            if page == .stats {
+                Button { RequestBrowserWindow.show(store: store) } label: {
+                    Label(L10n.string("展开窗口"), systemImage: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 11))
+                }.buttonStyle(PanelButtonStyle(cornerRadius: 5))
+                    .accessibilityIdentifier("request-browser-open")
+            }
             if page == .main {
                 Button { page = .settings } label: {
                     Image(systemName: "slider.horizontal.3").font(.system(size: 13))
@@ -95,6 +103,18 @@ struct ContentView: View {
 
     private var mainPanel: some View {
         VStack(spacing: 0) {
+            if store.needsSetup {
+                Button { page = .health } label: {
+                    HStack {
+                        Image(systemName: "checklist")
+                        Text(L10n.string("完成首次设置，检查采集状态"))
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                    }.font(.system(size: 11)).padding(9)
+                }.buttonStyle(PanelButtonStyle(kind: .neutral, cornerRadius: 6))
+                    .padding(.horizontal, PanelLayout.contentInset).padding(.bottom, 6)
+                    .accessibilityIdentifier("setup-status")
+            }
             if store.pendingSaveAfterAdd != nil {
                 VStack(alignment: .leading, spacing: 7) {
                     Text(L10n.string("在 Codex 完成登录后，保存新账号。不要点 Log out。")).font(.system(size: 11))

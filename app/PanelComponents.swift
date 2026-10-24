@@ -88,7 +88,11 @@ enum PanelFormat {
         value.formatted(.number.precision(.fractionLength(1)).grouping(.automatic))
     }
 
-    static func model(_ value: String) -> String { value == "unknown" ? L10n.string("未记录模型") : value }
+    static func model(_ value: String) -> String {
+        let fast = value.hasSuffix("::fast")
+        let name = fast ? String(value.dropLast(6)) : value
+        return (name == "unknown" ? L10n.string("未记录模型") : name) + (fast ? " · Fast" : "")
+    }
 
     static func tokens(_ value: Int) -> String {
         value.formatted(.number.grouping(.automatic).locale(Locale(identifier: "en_US")))

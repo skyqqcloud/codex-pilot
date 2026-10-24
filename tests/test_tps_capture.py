@@ -243,6 +243,20 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(min(s['completedAt'] for s in kept if s['model']=='a'),50)
         self.assertEqual(min(s['completedAt'] for s in kept if s['model']=='b'),20)
         self.assertEqual(len({s['id'] for s in kept}),200)
+    def test_fast_retention_is_independent_and_preserves_raw_model(self):
+        values=[]
+        for index in range(150):
+            for tier in (None, 'default', 'fast', 'priority'):
+                values.append(dict(id=str(index)+str(tier), model='same-model', completedAt=index,
+                                   outputTokens=12, durationSeconds=2, serviceTier=tier))
+        before=json.loads(json.dumps(values))
+        kept=capture.retained_samples(values+values)
+        self.assertEqual(values,before)
+        self.assertEqual(len(kept),200)
+        self.assertEqual(sum(s.get('serviceTier') in ('fast','priority') for s in kept),100)
+        self.assertTrue(all(s['model']=='same-model' and s['outputTokens']==12 and s['durationSeconds']==2 for s in kept))
+        self.assertEqual(len({s['id'] for s in kept}),200)
+
     def test_managed_configuration_preserves_settings_and_refuses_conflicts(self):
         home=self.root/'home';home.mkdir()
         config=home/'config.toml';original='model = "test"\n[features]\ncustom = true\n'

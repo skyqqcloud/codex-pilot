@@ -65,8 +65,9 @@ struct RequestBrowserView: View {
         let candidates = store.recentSpeeds.filter { state.project.isEmpty || store.requestContexts[$0.id]?.projectPath == state.project }
         var seen: Set<String> = []
         return candidates.compactMap { sample in
-            guard let id = sample.conversationID, seen.insert(id).inserted else { return nil }
-            return (id, store.requestContexts[sample.id]?.conversationTitle ?? String(id.prefix(8)))
+            let info = store.requestContexts[sample.id]
+            guard let id = info?.rootConversationID ?? sample.conversationID, seen.insert(id).inserted else { return nil }
+            return (id, info?.rootConversationTitle ?? info?.conversationTitle ?? String(id.prefix(8)))
         }
     }
     private var groups: [RequestHistoryGroup] { RequestHistoryGroup.make(samples, contexts: store.requestContexts) }
@@ -95,7 +96,10 @@ struct RequestBrowserView: View {
                         emptyList
                     } else {
                         GeometryReader { geometry in
-                            RequestHistoryList(ids: listRows.map(\.id), onSelect: store.selectRequest,
+                            RequestHistoryList(ids: listRows.map(\.id), onSelect: { id in
+                                guard let row = listRows.first(where: { $0.id == id }) else { return }
+                                if row.isAPI { store.selectRequest(id) }
+                            },
                                 width: geometry.size.width, viewportHeight: geometry.size.height, selection: selection?.id) { index in
                                 browserRow(listRows[index]).padding(.horizontal, 14)
                             }
@@ -134,6 +138,11 @@ struct RequestBrowserView: View {
 
     private var controls: some View {
         VStack(spacing: 10) {
+            HStack {
+                Text(L10n.string("统计时间")).foregroundStyle(palette.secondary)
+                SpeedTimePicker(store: store)
+                Spacer()
+            }
             HStack(spacing: 10) {
                 Picker(L10n.string("项目"), selection: $state.project) {
                     Text(L10n.string("全部项目")).tag("")
@@ -160,6 +169,7 @@ struct RequestBrowserView: View {
                 Picker(L10n.string("来源"), selection: $state.source) {
                     Text(L10n.string("全部来源")).tag("")
                     Text(L10n.string("用户对话")).tag("conversation")
+                    Text(L10n.string("子任务")).tag("subagent")
                     Text(L10n.string("消息建议")).tag("suggestion")
                     Text(L10n.string("上下文压缩")).tag("compaction")
                     Text(L10n.string("来源待确认")).tag("unknown")
@@ -183,7 +193,18 @@ struct RequestBrowserView: View {
         }.font(.system(size: 12)).frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func browserRow(_ row: RequestHistoryRow) -> some View {
+    private func toggleGroup(_ id: String) {
+        if state.expanded.contains(id) { state.expanded.remove(id) } else { state.expanded.insert(id) }
+    }
+    @ViewBuilder private func browserRow(_ row: RequestHistoryRow) -> some View {
+        if row.isAPI {
+            browserAPIRow(row)
+        } else {
+            RequestHierarchyHeading(row: row, context: store.requestContexts[row.sample.id],
+                expanded: state.expanded.contains(row.groupID!)) { toggleGroup(row.groupID!) }
+        }
+    }
+    private func browserAPIRow(_ row: RequestHistoryRow) -> some View {
         let sample = row.sample
         let context = store.requestContexts[sample.id]
         let selected = selection?.id == sample.id
@@ -222,7 +243,7 @@ struct RequestBrowserView: View {
                 }.font(.system(size: 10)).foregroundStyle(palette.secondary)
             }
         }
-        .padding(.leading, row.indented ? 14 : 0)
+        .padding(.leading, CGFloat(row.indent) * 14)
         .frame(maxWidth: .infinity, minHeight: PanelLayout.requestRowHeight)
         .padding(.horizontal, 6)
         .background(selected ? palette.inset : Color.clear, in: RoundedRectangle(cornerRadius: 6))
@@ -314,7 +335,7 @@ struct RequestInspector: View {
                 Label(URL(fileURLWithPath: path).lastPathComponent, systemImage: "folder")
                     .help(path).textSelection(.enabled)
             }
-            if let title = context?.conversationTitle {
+            if let title = context?.rootConversationTitle ?? context?.conversationTitle {
                 Label { Text(verbatim: title).textSelection(.enabled) } icon: { Image(systemName: "bubble.left") }
             } else if let id = sample.conversationID {
                 Label(String(id.prefix(8)), systemImage: "bubble.left").help(id)
@@ -323,6 +344,7 @@ struct RequestInspector: View {
                 .foregroundStyle(palette.secondary)
             if let description = context?.displaySourceDescription ?? context?.associationExplanation {
                 Text(description).foregroundStyle(palette.secondary).fixedSize(horizontal: false, vertical: true)
+                    .help(context?.attributionEvidence.map(L10n.key) ?? description)
             } else if sample.conversationID == nil {
                 Text(L10n.string("采集记录缺少对话标识，无法确认项目与消息归属。"))
                     .foregroundStyle(palette.secondary).fixedSize(horizontal: false, vertical: true)

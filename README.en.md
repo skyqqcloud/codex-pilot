@@ -35,10 +35,11 @@ The app supports English and Simplified Chinese and follows your macOS language.
 | --- | --- |
 | **Two-line menu bar** | The selected model's latest TPS above the active account's remaining quota. Check both without opening the panel. |
 | **Per-call measurements** | Latest-request and recent-five average rates, with standard and Fast entries measured separately and up to 100 captured requests retained per entry. |
-| **Conversation groups** | Each initiating message appears once. Follow-up calls are collapsed by default; expand them for individual output or tool summaries, models, Fast labels, TPS, and usage. |
+| **Conversation groups** | User messages, subtasks, and API calls form a collapsed hierarchy. Expand them for individual output or tool summaries, models, Fast labels, TPS, and usage. |
 | **Details window** | Filter by project, conversation, source, and preview text. Resize or pin a two-pane view of calls and full content. |
 | **Status and setup** | Check login, capture configuration, receiver process, captured calls, and quota refresh with relevant actions. |
 | **Multiple accounts** | Save, reorder, and switch logins. Refresh plans and quotas, with optional five-minute refreshes per account. |
+| **Quota history** | Hover over an account to inspect each quota window over 1 hour, 3 hours, 24 hours, or 7 days. Point at the chart for sample values. |
 
 File-change notifications, coalesced refreshes, incremental history reads, reusable workers, and separate background/interactive priorities reduce redundant work.
 
@@ -81,6 +82,8 @@ Choose **Open in window** in speed details for project and conversation filters.
 
 ## How is TPS calculated?
 
+Filter retained calls by the last hour, 24 hours, 7 days, or all time. The default is 24 hours, and your choice is saved. Models without calls in that range disappear from the list; the model summary scrolls after about 4.5 rows. The menu bar shows the last reliable measurement, with its model and sample time in the tooltip.
+
 TPS means tokens per second. Pilot measures the **client-observed non-reasoning output-stage rate**:
 
 ```text
@@ -116,7 +119,7 @@ It shows the active saved account's **remaining quota**. When several quota wind
 <details>
 <summary>Why are several API calls grouped under one user message?</summary>
 
-Codex may output text or call tools, then request the model again during a single task. Pilot groups these calls under the initiating message, with a separate TPS for each call. The message row represents the earliest captured call still retained in that group, labelled **First retained**. Expanding reveals later calls without repeating the user message.
+Codex may request the model repeatedly or dispatch subtasks during one task. Pilot displays user messages, subtasks, and individual API calls as a hierarchy. The message row represents the earliest retained parent call, labelled **First retained**; subtask headings show call counts. When filters leave only child calls, the user message becomes a heading without borrowing a child's TPS. Subtasks are linked only when thread identity, dispatch turns, and usage records agree. Missing or conflicting evidence remains pending.
 
 </details>
 

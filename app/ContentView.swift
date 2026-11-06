@@ -17,8 +17,10 @@ private enum PanelConfirmation: Identifiable {
 
 struct ContentView: View {
     @ObservedObject var store: SwapStore
+    var quotaHistoryURL = QuotaHistoryReader.defaultURL
     @State private var page: PanelPage = .main
     @State private var confirmation: PanelConfirmation?
+    @StateObject private var quotaTrends = QuotaTrendController()
     @Environment(\.colorScheme) private var scheme
 
     private var palette: PanelPalette { PanelPalette(scheme: scheme) }
@@ -60,7 +62,12 @@ struct ContentView: View {
             page = .main
             Task { await store.refreshForPanel() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+        .onDisappear { quotaTrends.close() }
+        .onChange(of: page) { quotaTrends.close() }
+        .onChange(of: confirmation != nil) { if confirmation != nil { quotaTrends.close() } }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { notification in
+            // Inspecting a chart must not launch account/TPS readers again.
+            if (notification.object as? NSWindow)?.identifier?.rawValue == "quota-trend-window" { return }
             Task { await store.refreshForPanel() }
         }
         .onExitCommand {
@@ -166,7 +173,11 @@ struct ContentView: View {
                                 }
                             }
                             .disabled(store.busy || store.needsSave)
+                            .background(QuotaTrendAnchor(controller: quotaTrends, row: row, scheme: scheme, historyURL: quotaHistoryURL,
+                                refresh: { Task { await store.refreshSlot(row.name) } }))
+                            .accessibilityAction(named: Text(L10n.string("查看额度变化"))) { quotaTrends.open(row.name) }
                             .contextMenu {
+                                Button(L10n.string("查看额度变化")) { quotaTrends.open(row.name) }
                                 Button(L10n.string("刷新这个账号额度")) { Task { await store.refreshSlot(row.name) } }
                                     .disabled(store.busy || store.needsSave)
                                 Button(store.autoRefresh.contains(row.name) ? L10n.string("关闭自动刷新") : L10n.string("开启自动刷新")) {

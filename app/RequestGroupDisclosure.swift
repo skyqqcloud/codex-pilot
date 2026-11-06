@@ -1,6 +1,47 @@
 import AppKit
 import SwiftUI
 
+/// Structural headings carry counts, never a fabricated API speed or selection.
+struct RequestHierarchyHeading: View {
+    let row: RequestHistoryRow
+    let context: RequestCallContext?
+    let expanded: Bool
+    let toggle: () -> Void
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let palette = PanelPalette(scheme: scheme)
+        HStack(spacing: 5) {
+            RequestGroupDisclosure(groupID: row.groupID!, expanded: expanded, callCount: row.callCount, toggle: toggle)
+                .frame(width: 18, height: 32)
+            Button(action: toggle) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Image(systemName: row.kind == .subtaskHeader ? "rectangle.3.group" : "bubble.left")
+                            .font(.system(size: 10)).foregroundStyle(palette.secondary)
+                        Text(verbatim: row.preview ?? "").lineLimit(1).truncationMode(.tail)
+                            .font(.system(size: 11, weight: .medium)).help(row.preview ?? "")
+                        Spacer(minLength: 4)
+                        Text(L10n.string("\(row.callCount) 次调用")).font(.system(size: 10))
+                            .foregroundStyle(palette.secondary).fixedSize()
+                    }
+                    HStack {
+                        Text(row.kind == .subtaskHeader && context?.groupID == nil ?
+                            L10n.string("子任务 · 用户消息待关联") : row.subtitle ?? "")
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                    }.font(.system(size: 10)).foregroundStyle(palette.tertiary)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: PanelLayout.requestRowHeight - 0.5)
+            }.buttonStyle(.plain)
+        }
+        .padding(.leading, CGFloat(row.indent) * 14)
+        .help(context?.attributionEvidence.map(L10n.key) ?? context?.associationExplanation ?? "")
+        .overlay(alignment: .bottom) { Rectangle().fill(palette.rule.opacity(0.65)).frame(height: 0.5) }
+        .accessibilityElement(children: .contain).accessibilityIdentifier(row.id)
+    }
+}
+
 /// Separate from the request-selection button, so disclosure never changes
 /// which API's details are shown unless its selected child is being hidden.
 struct RequestGroupDisclosure: NSViewRepresentable {

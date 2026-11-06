@@ -242,3 +242,55 @@
 "重新读取" = "Read again";
 "窗口置顶" = "Keep window on top";
 "保持在其他窗口上方" = "Keep above other windows";
+
+/* Account quota history */
+"额度变化" = "Quota history";
+"关闭" = "Close";
+"剩余额度" = "Remaining quota";
+"时间范围" = "Time range";
+"最近 24 小时" = "Last 24 hours";
+"最近 7 天" = "Last 7 days";
+"未能读取额度历史" = "Could not read quota history";
+"从下一次成功刷新开始记录" = "History starts with the next successful refresh";
+"开启账号自动刷新后，正常情况下约每 5 分钟保存一次；也可手动刷新。" = "Enable auto-refresh to save a sample about every 5 minutes. Manual refreshes are also recorded.";
+"显示最近 20,000 条采样。" = "Showing the latest 20,000 samples.";
+"本地保留 30 天；图中空白表示未采样。" = "Stored locally for 30 days. Gaps indicate missing samples.";
+"这个时间范围内暂无采样" = "No samples in this time range";
+"约 1 小时下降 %lld 个百分点" = "Down %lld percentage points in about an hour";
+"约 1 小时回升 %lld 个百分点" = "Up %lld percentage points in about an hour";
+"%@ 首次记录到 ≤%lld%%" = "%@ · First observed at or below %lld%%";
+"指向图表查看采样时间与额度" = "Point at the chart to inspect a sample";
+"虚线标记额度周期或套餐变更" = "Dashed lines mark window or plan changes";
+"额度历史，%lld 次采样" = "Quota history, %lld samples";
+"查看额度变化" = "View quota history";
+"最近 1 小时" = "Last 1 hour";
+"最近 3 小时" = "Last 3 hours";
+"%@剩余" = "%@ remaining";
+"额度历史说明" = "About quota history";
+"正常约每 5 分钟采样。同周期采样点连续连线，纵轴固定为 0%～100%。" = "Samples are normally saved about every 5 minutes. Points in the same quota cycle are connected. The vertical scale stays at 0% to 100%.";
+"历史仅保存在本机，保留 30 天。" = "History stays on this Mac for 30 days.";
+"首次记录时间是采样时间，实际变化可能发生在两次采样之间。" = "First observed means the sample time. The actual change may have happened between samples.";
+
+"全部时间" = "All time";
+
+"统计时间" = "Time range";
+
+"最新调用暂无可靠计时" = "The latest call has no reliable timing yet";
+
+"最近一次可靠测速（%@）：%@\n采样时间：%@" = "Last reliable speed (%@): %@\nSample time: %@";
+
+"子任务" = "Subtask";
+
+"用户消息" = "User message";
+
+"子任务 · 用户消息待关联" = "Subtask · User message pending";
+
+"已确认子任务，用户消息待关联。" = "Subtask confirmed; user message pending.";
+
+"由主会话明确派发的子任务。" = "Explicitly dispatched by the parent conversation.";
+
+"子会话标识、四项用量唯一匹配及派发轮次一致。" = "Verified child thread ID, unique match of all four usage counters, and matching dispatch turn.";
+
+"已确认子任务，但用量记录缺失或不唯一，暂不归入用户消息。" = "Subtask confirmed, but usage records are missing or ambiguous. User message pending.";
+
+"子任务的派发记录缺失或存在冲突，用户消息待关联。" = "Subtask dispatch evidence is missing or conflicting. User message pending.";

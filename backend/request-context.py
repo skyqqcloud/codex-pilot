@@ -60,6 +60,49 @@ def thread_metadata(home, conversations):
                 if key in values[0] and all(value.get(key)==values[0][key] for value in values)}
             for id,values in candidates.items()}
 
+def thread_lineage(home, ids):
+    """Exact-ID source metadata; never infer ancestry from names or timestamps."""
+    candidates = {}
+    ids = sorted({x for x in ids if isinstance(x, str) and UUID.fullmatch(x)})
+    for database in sorted(Path(home).glob('state_*.sqlite')):
+        try:
+            with closing(sqlite3.connect(database.resolve().as_uri()+'?mode=ro', uri=True, timeout=.25)) as db:
+                columns = {r[1] for r in db.execute('pragma table_info(threads)')}
+                fields = ['source','thread_source','agent_path','agent_nickname']
+                selection = ','.join(f if f in columns else 'NULL' for f in fields)
+                for offset in range(0,len(ids),400):
+                    batch = ids[offset:offset+400]
+                    for cid, raw, source, path, nickname in db.execute(
+                        'select id,'+selection+' from threads where id in ('+','.join('?' for _ in batch)+')',batch):
+                        try: value = json.loads(raw) if isinstance(raw,str) else None
+                        except ValueError: value = None
+                        agent = value.get('subagent') if isinstance(value,dict) else None
+                        spawn = agent.get('thread_spawn',{}) if isinstance(agent,dict) else {}
+                        if not isinstance(spawn,dict): spawn = {}
+                        parent = spawn.get('parent_thread_id')
+                        parent = parent if isinstance(parent,str) and UUID.fullmatch(parent) else None
+                        agent_path = path or spawn.get('agent_path')
+                        item = dict(subagent=source=='subagent' or bool(spawn), parent=parent,
+                                    path=agent_path if isinstance(agent_path,str) else None,
+                                    nickname=nickname if isinstance(nickname,str) else None)
+                        candidates.setdefault(cid,[]).append(item)
+        except (sqlite3.Error,OSError,TypeError): continue
+    result = {}
+    for cid, values in candidates.items():
+        if all(x==values[0] for x in values): result[cid]=values[0]
+        elif any(x['subagent'] for x in values): result[cid]=dict(subagent=True,parent=None,path=None,nickname=None)
+    return result
+
+USAGE_FIELDS = ('input_tokens','output_tokens','reasoning_output_tokens','cached_input_tokens')
+SAMPLE_USAGE_FIELDS = ('inputTokens','outputTokens','reasoningTokens','cachedTokens')
+
+def usage_identity(value, fields=USAGE_FIELDS):
+    if not isinstance(value,dict): return None
+    counts = tuple(value.get(k) for k in fields)
+    if not all(type(n) is int and 0 <= n <= 2**63-1 for n in counts): return None
+    if counts[2]>counts[1] or counts[3]>counts[0]: return None
+    return counts
+
 def suggestion_sources(home, samples):
     """Only called for conversations without rollouts; never export their internal prompts."""
     database = Path(home) / 'logs_2.sqlite'
@@ -179,7 +222,7 @@ def output_timings(home, samples):
                     'and target=? and ts between ? and ? '
                     'and feedback_log_body like ? order by ts,ts_nanos',
                     (conversation, 'codex_core::stream_events_utils', low, high, '%Output item item_type=%')).fetchall()
-                starts, earlier_untrusted = [], []
+                starts, arrivals, earlier_untrusted = [], [], []
                 for seconds, nanos, body in rows:
                     if not isinstance(body, str): continue
                     leaf = body.rsplit('}:', 1)[-1].strip()
@@ -197,10 +240,23 @@ def output_timings(home, samples):
                         other = re.match(r'^Output item item_type="([^"]+)"', leaf)
                         if done or (other and other.group(1) != 'reasoning'):
                             earlier_untrusted.append((seconds + nanos / 1e9, model))
+                    if models and re.match(r'^Output item item_type="', leaf):
+                        arrivals.append((seconds + nanos / 1e9,
+                                         next((quoted or plain for quoted, plain in reversed(models)), None)))
                 for call in calls:
                     start, end = call['startedAt'], call['completedAt']
                     if any(other['id'] != call['id'] and other['model'] == call['model'] and
                            other['startedAt'] < end and other['completedAt'] > start for other in calls):
+                        continue
+                    # Consumer logs can be buffered long after the network has
+                    # received output. Never mix their late start with the
+                    # transport end. Require the first item on both timelines
+                    # to agree within 10 ms (transport timestamps use ms).
+                    duration = call.get('durationSeconds')
+                    if type(duration) not in (int, float) or not math.isfinite(duration) or not 0 < duration <= end-start:
+                        continue
+                    first_items = [when for when, model in arrivals if model == call['model'] and start <= when < end]
+                    if not first_items or abs(min(first_items) - (end - duration)) > .010:
                         continue
                     eligible = [when for when, model in starts if model == call['model'] and start <= when < end]
                     if eligible:
@@ -217,7 +273,7 @@ def output_timings(home, samples):
     return result
 
 class RolloutIndex:
-    """Volatile, bounded association facts. No token counters or timing cache.
+    """Volatile, bounded association facts. No TPS calculations or timing cache.
 
     Full text stays in the rollout; offsets are used only after checking the
     file identity. An idle worker blocks on stdin, without a refresh timer.
@@ -238,7 +294,7 @@ class RolloutIndex:
         header = RECORD_HEADER.match(line[:512])
         if header:
             root = header.group(1)
-            if root not in (b'response_item', b'event_msg', b'turn_context', b'compacted'): return None
+            if root not in (b'response_item', b'event_msg', b'turn_context', b'compacted', b'session_meta'): return None
             if root == b'response_item' and re.match(
                 br'\s*"type"\s*:\s*"(?:reasoning|function_call_output|custom_tool_call_output)"\s*[,}]',
                 line[header.end():header.end()+128]): return None
@@ -256,7 +312,22 @@ class RolloutIndex:
         if kind == 'turn_context': return dict(turn_id=payload.get('turn_id'))
         if kind == 'event_msg':
             event = payload.get('type')
-            if event in ('task_started', 'task_complete'): return dict(type=event, turn_id=payload.get('turn_id'))
+            if event in ('task_started', 'task_complete'):
+                result = dict(type=event,turn_id=payload.get('turn_id'))
+                attribution = payload.get('turn_attribution')
+                if event == 'task_started' and isinstance(attribution,dict):
+                    result['turn_attribution'] = {k:attribution.get(k) for k in
+                        ('turn_id','parent_turn_id','root_turn_id') if isinstance(attribution.get(k),str)}
+                return result
+            if event == 'token_count':
+                info = payload.get('info')
+                key = usage_identity(info.get('last_token_usage')) if isinstance(info,dict) else None
+                return dict(type=event,usage=key) if key is not None else None
+            if event == 'item_completed':
+                item = payload.get('item')
+                if isinstance(item,dict) and item.get('type')=='SubAgentActivity' and item.get('kind') in ('started','interacted'):
+                    return dict(type=event,thread_id=payload.get('thread_id'),turn_id=payload.get('turn_id'),
+                        child=item.get('agent_thread_id'))
             if event != 'user_message': return None
             text = message_text(payload.get('message'))
             if text: return dict(type=event, message=sentence(text) or text[:80], dedup=hashlib.sha256(text.encode()).hexdigest())
@@ -309,11 +380,27 @@ class RolloutIndex:
                 decoded = self.decode(line)
                 if decoded is None: continue
                 when, kind, payload = decoded
+                if kind=='session_meta' and offset==0: state['session']=payload.get('id')
+                if kind=='event_msg' and payload.get('type')=='task_started':
+                    attribution = payload.get('turn_attribution')
+                    state['subtask_turn'] = payload.get('turn_id') if isinstance(attribution,dict) and attribution.get('parent_turn_id') else None
+                # Usage facts are needed only for explicitly attributed child
+                # turns. Keeping every ordinary token-count update would evict
+                # warm conversation caches and repeatedly scan large rollouts.
+                if kind=='event_msg' and payload.get('type')=='token_count' and (
+                    not state.get('subtask_turn') or state.get('subtask_turn')!=state.get('turn')): continue
                 kept = self.compact(kind, payload)
                 if kept is not None:
+                    if kept.get('turn_id') and (kind=='turn_context' or
+                        (kind=='event_msg' and kept.get('type')=='task_started')):
+                        state['turn'] = kept['turn_id']
+                    kept['_turn'] = state.get('turn')
+                    kept['_session'] = state.get('session')
                     # Only references and short text survive this iteration.
                     kept['_ref'] = (path, stamp[:2], offset, hashlib.sha256(line).digest())
                     state['records'].append((when, kind, kept))
+                    if kind=='event_msg' and kept.get('type')=='task_complete' and kept.get('turn_id') in (None,state.get('turn')):
+                        state['turn'] = None
             after = self.stamp(os.fstat(stream.fileno()))
             current = self.stamp(path.stat())
             if (after != current or after[:2] != stamp[:2] or after[2] < stamp[2] or
@@ -344,6 +431,148 @@ class RolloutIndex:
             decoded = self.decode(line)
             if decoded is None: raise OSError('Missing rollout record')
             return decoded[2]
+
+
+class TaskAttribution:
+    """Display-only proof chain. No timing-based parent selection or numeric writes."""
+    def __init__(self, owner):
+        self.owner, self.meta, self.cache = owner, {}, {}
+
+    def facts(self, conversation):
+        if conversation in self.cache: return self.cache[conversation]
+        paths = self.owner.paths.get(conversation,[])
+        # One thread can span several rollout files. Trust their session ID,
+        # not a UUID-looking filename. Deduplicate replicated facts, retaining
+        # distinct usage events so identical counters remain ambiguous.
+        records = []
+        try:
+            for path in sorted(paths):
+                for when,kind,payload in self.owner.index.records(path):
+                    if payload.get('_session')!=conversation: continue
+                    records.append((when,kind,payload))
+        except (OSError,ValueError): self.cache[conversation]=None; return None
+        users, tasks, usages, links, active = [], {}, {}, {}, {}
+        previous_path = None
+        for when, kind, payload in records:
+            turn = payload.get('_turn')
+            path = payload['_ref'][0]
+            if path!=previous_path: active={}; previous_path=path
+            if kind=='event_msg' and payload.get('type')=='task_started':
+                tasks.setdefault(payload.get('turn_id'),[]).append(payload.get('turn_attribution',{}))
+            elif kind=='event_msg' and payload.get('type')=='task_complete':
+                active.pop(payload.get('turn_id') or turn,None)
+            elif kind=='event_msg' and payload.get('type')=='token_count':
+                copies = usages.setdefault(tuple(payload['usage']),{}).setdefault((when,turn),{})
+                copies[path]=copies.get(path,0)+1
+            elif kind=='event_msg' and payload.get('type')=='item_completed':
+                if payload.get('thread_id')==conversation and turn==payload.get('turn_id'):
+                    links.setdefault((payload.get('child'),turn),[]).append(active.get(turn))
+            source = None
+            if kind=='response_item' and payload.get('role')=='user':
+                text = message_text('\n'.join(x.get('text','') for x in payload.get('content',[]) if isinstance(x,dict)))
+                source = 'response'
+            elif kind=='event_msg' and payload.get('type')=='user_message':
+                text, source = message_text(payload.get('message')), 'event'
+            if source and text:
+                user = dict(time=when,turn=turn,text=text,source=source,
+                    dedup=payload.get('dedup'),reference=payload.get('_ref'))
+                users.append(user); active[turn]=user
+        def canonical(user):
+            if user and user['source']=='event':
+                matches = [v for v in users if v['source']=='response' and v['turn']==user['turn'] and
+                    v['dedup']==user['dedup'] and abs(v['time']-user['time'])<2]
+                if len({(x['time'],x['dedup']) for x in matches})==1: return matches[0]
+            return user
+        links = {key:[canonical(user) for user in candidates] for key,candidates in links.items()}
+        users = [u for u in users if u['source']!='event' or not any(
+            v['source']=='response' and v['turn']==u['turn'] and v['dedup']==u['dedup'] and
+            abs(v['time']-u['time'])<2 for v in users)]
+        result = dict(users=users,tasks=tasks,usages={k:[turn for (_,turn),copies in v.items()
+            for _ in range(max(copies.values()))] for k,v in usages.items()},links=links)
+        self.cache[conversation]=result
+        return result
+
+    def user(self, conversation, turn, visited=(), dispatched_user=None):
+        pair = (conversation,turn)
+        if pair in visited or len(visited)>=4: return None,'subtask_cycle'
+        meta, facts = self.meta.get(conversation), self.facts(conversation)
+        if not meta or not facts or not turn or turn not in facts['tasks']: return None,'subtask_parent_missing'
+        if not meta['subagent']:
+            if not dispatched_user: return None,'subtask_user_ambiguous'
+            return dict(conversation=conversation,turn=turn,user=dispatched_user),None
+        attributes = facts['tasks'][turn]
+        if not attributes or any(a!=attributes[0] for a in attributes): return None,'subtask_turn_conflict'
+        attribution = attributes[0]
+        if attribution.get('turn_id')!=turn: return None,'subtask_turn_conflict'
+        parent, parent_turn = meta.get('parent'), attribution.get('parent_turn_id')
+        parent_facts = self.facts(parent) if parent else None
+        if not parent_facts or (conversation,parent_turn) not in parent_facts['links']:
+            return None,'subtask_dispatch_missing'
+        # The explicit dispatch's record position identifies the active human
+        # message. Later steering messages in the same turn cannot steal it.
+        # Repeated dispatches pointing at different humans remain ambiguous.
+        candidates = parent_facts['links'][(conversation,parent_turn)]
+        identities = {(u['time'],u['dedup']) if u else None for u in candidates}
+        if not self.meta.get(parent,{}).get('subagent') and (len(identities)!=1 or None in identities):
+            return None,'subtask_user_ambiguous'
+        result, issue = self.user(parent,parent_turn,visited+(pair,),candidates[0])
+        if result and attribution.get('root_turn_id') not in (None,result['turn']):
+            return None,'subtask_turn_conflict'
+        return result,issue
+
+    def apply(self, samples, result, full_id):
+        ids = {s.get('conversationID') for s in samples}
+        self.meta.update(thread_lineage(self.owner.home,ids))
+        if not any(m['subagent'] for m in self.meta.values()): return result
+        for _ in range(4):
+            parents = {m['parent'] for m in self.meta.values() if m.get('parent') and m['parent'] not in self.meta}
+            if not parents or len(parents)>64: break
+            found = thread_lineage(self.owner.home,parents)
+            if not found: break
+            self.meta.update(found)
+        peers = {}
+        for s in samples:
+            peers.setdefault((s.get('conversationID'),usage_identity(s,SAMPLE_USAGE_FIELDS)),[]).append(s['id'])
+        root_metadata = thread_metadata(self.owner.home,self.meta)
+        for sample in samples:
+            conversation = sample.get('conversationID')
+            meta = self.meta.get(conversation)
+            if not meta or not meta['subagent']: continue
+            info = result.setdefault(sample['id'],{})
+            if info.get('sourceKind') in CALL_SOURCES:
+                info['callSource']=dict(kind='source',title=info['sourceTitle'],text=info['sourceDescription'])
+            for key in ('groupID','groupPreview','groupTimestamp','message'): info.pop(key,None)
+            path = meta.get('path')
+            title = path.rstrip('/').rsplit('/',1)[-1] if path else meta.get('nickname') or '子任务'
+            info.update(sourceKind='subagent',sourceTitle='子任务',subtaskTitle=title[:120],
+                sourceDescription='已确认子任务，用户消息待关联。')
+            if meta.get('parent'): info['parentConversationID']=meta['parent']
+            facts = self.facts(conversation)
+            key = usage_identity(sample,SAMPLE_USAGE_FIELDS)
+            matches = facts['usages'].get(key,[]) if facts and key is not None else []
+            if len(matches)!=1 or len(peers[(conversation,key)])!=1 or not matches[0]:
+                info['associationIssue']='subtask_usage_ambiguous'; continue
+            turn = matches[0]
+            info.update(subtaskID=hashlib.sha256((conversation+':'+turn).encode()).hexdigest(),subtaskTurnID=turn)
+            root, issue = self.user(conversation,turn)
+            if root is None:
+                info['associationIssue']=issue; continue
+            user, cid = root['user'], root['conversation']
+            identity = '%s:%s:%.6f' % (cid,root['turn'],user['time'])
+            info.update(groupID=hashlib.sha256(identity.encode()).hexdigest(),groupPreview=sentence(user['text']),
+                groupTimestamp=user['time'],rootConversationID=cid,
+                sourceDescription='由主会话明确派发的子任务。',
+                attributionEvidence='子会话标识、四项用量唯一匹配及派发轮次一致。')
+            if info.get('associationIssue') not in ('overlap','no_output'): info.pop('associationIssue',None)
+            if root_metadata.get(cid,{}).get('conversationTitle'): info['rootConversationTitle']=root_metadata[cid]['conversationTitle']
+            if sample['id']==full_id:
+                try:
+                    payload = self.owner.index.full(user['reference'])
+                    text = payload.get('message') if user['source']=='event' else '\n'.join(
+                        x.get('text','') for x in payload.get('content',[]) if isinstance(x,dict))
+                    info['message']=message_text(text)
+                except (OSError,ValueError): info['associationIssue']='subtask_parent_missing'
+        return result
 
 
 class RequestContext:
@@ -542,7 +771,7 @@ class RequestContext:
                         info['associationIssue'] = ('overlap' if overlaps else 'no_rollout' if not self.paths.get(conversation)
                                                     else 'no_user' if not user else 'no_output')
                 if info: result[sample['id']] = info
-        return result
+        return TaskAttribution(self).apply(samples,result,full_id)
 
     def enrich(self,samples):
         if not samples:return

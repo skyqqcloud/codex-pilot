@@ -377,7 +377,25 @@ class ContextTests(unittest.TestCase):
  def test_output_timing_accepts_current_codex_arrival_marker_without_added_span(self):
   self.logs([(1010,ID,'turn{model=a}:try_run_sampling_request{model=a}: Output item item_type="message" item_id="msg_x"'),
              (1011,ID,'turn{model=a}:receiving_stream:handle_responses{from="output_item_done"}:handle_output_item_done: Output item item_type="message" item_id="msg_x"')])
-  self.assertEqual(context.output_timings(self.home,[self.sample('a',1001,1012)]),{'a':2})
+  sample=dict(self.sample('a',1001,1012),durationSeconds=2)
+  self.assertEqual(context.output_timings(self.home,[sample]),{'a':2})
+ def test_buffered_local_output_cannot_shorten_transport_timing(self):
+  # Real failure shape: 272 tokens, 1.829s transport output, but the local
+  # consumer sees its first item just 0.080598s before transport completion.
+  sample=dict(self.sample('burst',1000,1002.921),durationSeconds=1.829,outputTokens=272,reasoningTokens=0)
+  self.logs([(1002.840402,ID,self.added('message'))])
+  self.assertEqual(context.output_timings(self.home,[sample]),{})
+ def test_delayed_reasoning_arrival_does_not_establish_a_later_output_clock(self):
+  sample=dict(self.sample('reasoning',1000,1004),durationSeconds=3,reasoningTokens=100)
+  self.logs([(1002.8,ID,self.added('reasoning')),(1003.9,ID,self.added('custom_tool_call'))])
+  self.assertEqual(context.output_timings(self.home,[sample]),{})
+ def test_first_item_agreement_allows_timestamp_rounding_but_not_large_drift(self):
+  sample=dict(self.sample('aligned',1001,1005),reasoningTokens=100)
+  self.logs([(1002.001,ID,self.added('reasoning')),(1003,ID,self.added('message'))])
+  self.assertEqual(context.output_timings(self.home,[sample]),{'aligned':2})
+  with sqlite3.connect(self.home/'logs_2.sqlite') as db:db.execute('delete from logs')
+  self.logs([(1002.020,ID,self.added('reasoning')),(1003,ID,self.added('message'))])
+  self.assertEqual(context.output_timings(self.home,[sample]),{})
  def test_output_timing_supports_tools_and_does_not_borrow_other_calls(self):
   self.logs([(1000,ID,self.added('message')),(1002,ID,self.added('custom_tool_call')),
              (1006,ID,self.added('function_call')),(1007,ID,self.added('message','other')),
@@ -405,4 +423,167 @@ class ContextTests(unittest.TestCase):
   samples=[self.sample('good',1001,1004),self.sample('nan',float('nan'),1004),
            self.sample('reversed',1004,1001),dict(self.sample('missing',1001,1004),startedAt=None)]
   self.assertEqual(context.output_timings(self.home,samples),{'good':2})
+class SubtaskContextTests(unittest.TestCase):
+ def setUp(self):
+  self.tmp=tempfile.TemporaryDirectory();self.home=Path(self.tmp.name)
+  self.child='019f0000-1111-7000-8000-000000000002';self.root=ID
+  self.paths={};self.rows={}
+  for cid in [self.root,self.child]:
+   path=self.home/'sessions'/('rollout-'+cid+'.jsonl');path.parent.mkdir(exist_ok=True)
+   self.paths[cid]=path;self.rows[cid]=[];self.add(cid,1,'session_meta',dict(id=cid))
+  with sqlite3.connect(self.home/'state_5.sqlite') as db:
+   db.execute('create table threads(id text,rollout_path text,source text,thread_source text,agent_path text,title text,cwd text)')
+   db.execute('insert into threads values(?,?,?,?,?,?,?)',(self.root,str(self.paths[self.root]),'"cli"','cli',None,'主会话','/project'))
+   db.execute('insert into threads values(?,?,?,?,?,?,?)',(self.child,str(self.paths[self.child]),json.dumps(dict(subagent=dict(thread_spawn=dict(parent_thread_id=self.root)))),'subagent','/root/collect',None,'/project'))
+  self.add(self.root,100,'event_msg',dict(type='task_started',turn_id='parent-turn'))
+  self.add(self.root,101,'response_item',dict(role='user',content=[dict(text='收集行情。完整要求')]))
+  self.dispatch(self.root,self.child,'parent-turn',102)
+  # Deliberately unrelated wall clocks: ancestry is established by IDs, not proximity.
+  self.start(self.child,'child-turn','parent-turn','parent-turn',9000)
+  self.usage(self.child,9001)
+  self.samples=[dict(id='call',conversationID=self.child,model='terra',inputTokens=100,outputTokens=30,
+     reasoningTokens=10,cachedTokens=50,startedAt=9000,completedAt=9002,durationSeconds=1,ttftSeconds=1)]
+ def tearDown(self):self.tmp.cleanup()
+ def add(self,cid,t,kind,payload):
+  self.rows[cid].append(dict(timestamp=datetime.datetime.fromtimestamp(t,datetime.timezone.utc).isoformat(),type=kind,payload=payload))
+  self.paths[cid].write_text(''.join(json.dumps(r)+'\n' for r in self.rows[cid]))
+ def dispatch(self,parent,child,turn,t):
+  self.add(parent,t,'event_msg',dict(type='item_completed',thread_id=parent,turn_id=turn,
+   item=dict(type='SubAgentActivity',kind='started',agent_thread_id=child)))
+ def start(self,cid,turn,parent,root,t):
+  self.add(cid,t,'event_msg',dict(type='task_started',turn_id=turn,
+   turn_attribution=dict(turn_id=turn,parent_turn_id=parent,root_turn_id=root)))
+ def usage(self,cid,t,**changes):
+  usage=dict(input_tokens=100,output_tokens=30,reasoning_output_tokens=10,cached_input_tokens=50);usage.update(changes)
+  self.add(cid,t,'event_msg',dict(type='token_count',info=dict(last_token_usage=usage)))
+ def resolve(self,full=None,owner=None):
+  return (owner or context.RequestContext(self.home)).call_contexts(self.samples,full)
+ def test_exact_dispatch_turn_and_unique_usage_link_to_human_without_time_guess(self):
+  before=json.dumps(self.samples,sort_keys=True)
+  info=self.resolve('call')['call']
+  identity='%s:%s:%.6f'%(self.root,'parent-turn',101)
+  self.assertEqual(info['groupID'],hashlib.sha256(identity.encode()).hexdigest())
+  self.assertEqual(info['message'],'收集行情。完整要求');self.assertEqual(info['subtaskTitle'],'collect')
+  self.assertEqual(info['rootConversationID'],self.root);self.assertEqual(info['parentConversationID'],self.root)
+  self.assertEqual(json.dumps(self.samples,sort_keys=True),before)
+ def test_reused_child_turns_follow_their_own_parent_turn(self):
+  self.add(self.root,200,'event_msg',dict(type='task_started',turn_id='new-parent'))
+  self.add(self.root,201,'response_item',dict(role='user',content=[dict(text='另一条要求')]))
+  self.dispatch(self.root,self.child,'new-parent',202)
+  self.start(self.child,'new-child','new-parent','new-parent',9003);self.usage(self.child,9004,output_tokens=31)
+  self.samples.append(dict(self.samples[0],id='second',outputTokens=31,startedAt=9003,completedAt=9005))
+  result=self.resolve();a,b=result['call'],result['second']
+  self.assertNotEqual(a['subtaskID'],b['subtaskID']);self.assertNotEqual(a['groupID'],b['groupID'])
+  self.assertEqual(b['groupPreview'],'另一条要求')
+ def test_duplicate_usage_or_sample_counters_remain_pending(self):
+  self.usage(self.child,9001.5)
+  self.assertEqual(self.resolve()['call']['associationIssue'],'subtask_usage_ambiguous')
+  self.rows[self.child].pop();self.paths[self.child].write_text(''.join(json.dumps(r)+'\n' for r in self.rows[self.child]))
+  self.samples.append(dict(self.samples[0],id='duplicate'))
+  self.assertTrue(all('groupID' not in x for x in self.resolve().values()))
+ def test_missing_or_conflicting_dispatch_does_not_fall_back_to_nearby_user(self):
+  for change in ['missing','wrong-thread','wrong-turn','wrong-child','completion-only']:
+   with self.subTest(change=change):
+    original=json.loads(json.dumps(self.rows[self.root]));row=self.rows[self.root][-1]['payload']
+    if change=='missing':self.rows[self.root].pop()
+    elif change=='wrong-thread':row['thread_id']=self.child
+    elif change=='wrong-turn':row['turn_id']='unrelated'
+    elif change=='wrong-child':row['item']['agent_thread_id']=self.root
+    else:row['item']['kind']='completed'
+    self.paths[self.root].write_text(''.join(json.dumps(r)+'\n' for r in self.rows[self.root]))
+    info=self.resolve()['call'];self.assertNotIn('groupID',info);self.assertIn('subtaskID',info)
+    self.rows[self.root]=original
+ def test_ambiguous_root_messages_and_wrong_root_turn_are_not_grouped(self):
+  self.add(self.root,101.5,'response_item',dict(role='user',content=[dict(text='插入另一条要求')]))
+  self.assertEqual(self.resolve()['call']['groupPreview'],'收集行情。')  # later steering cannot steal an earlier dispatch
+  self.dispatch(self.root,self.child,'parent-turn',103)
+  self.assertEqual(self.resolve()['call']['associationIssue'],'subtask_user_ambiguous')
+  self.rows[self.root].pop()
+  self.rows[self.root].pop();self.paths[self.root].write_text(''.join(json.dumps(r)+'\n' for r in self.rows[self.root]))
+  self.rows[self.child][1]['payload']['turn_attribution']['root_turn_id']='wrong'
+  self.paths[self.child].write_text(''.join(json.dumps(r)+'\n' for r in self.rows[self.child]))
+  self.assertEqual(self.resolve()['call']['associationIssue'],'subtask_turn_conflict')
+ def test_multiple_identity_verified_rollouts_deduplicate_replicas(self):
+  other=self.paths[self.root].with_name('rollout-'+self.root+'_copy.jsonl')
+  other.write_bytes(self.paths[self.root].read_bytes())
+  info=self.resolve('call')['call'];self.assertIn('groupID',info)
+  wrong=self.paths[self.root].with_name('rollout-'+self.root+'_wrong.jsonl')
+  data=json.loads(json.dumps(self.rows[self.root]));data[0]['payload']['id']=self.child
+  wrong.write_text(''.join(json.dumps(r)+'\n' for r in data))
+  self.assertEqual(self.resolve('call')['call']['groupID'],info['groupID'])
+ def test_file_identity_is_required_even_when_filename_matches(self):
+  self.rows[self.root][0]['payload']['id']=self.child
+  self.paths[self.root].write_text(''.join(json.dumps(r)+'\n' for r in self.rows[self.root]))
+  self.assertNotIn('groupID',self.resolve()['call'])
+ def test_turn_after_completion_cannot_borrow_previous_turn(self):
+  self.rows[self.child].pop()
+  self.add(self.child,9000.5,'event_msg',dict(type='task_complete'))
+  self.usage(self.child,9001)
+  self.assertNotIn('subtaskID',self.resolve()['call'])
+ def test_parent_completion_clears_the_active_human_even_if_context_reappears(self):
+  self.rows[self.root].pop()
+  self.add(self.root,102,'event_msg',dict(type='task_complete',turn_id='parent-turn'))
+  self.add(self.root,103,'turn_context',dict(turn_id='parent-turn'))
+  self.dispatch(self.root,self.child,'parent-turn',104)
+  self.assertNotIn('groupID',self.resolve()['call'])
+ def test_missing_or_invalid_usage_and_malformed_metadata_fail_closed(self):
+  self.rows[self.child].pop()
+  self.paths[self.child].write_text(''.join(json.dumps(r)+'\n' for r in self.rows[self.child]))
+  self.assertNotIn('subtaskID',self.resolve()['call'])
+  for bad in [True,-1,None]:
+   self.usage(self.child,9001,input_tokens=bad)
+   self.assertNotIn('groupID',self.resolve()['call'])
+   self.rows[self.child].pop()
+  with sqlite3.connect(self.home/'state_5.sqlite') as db:
+   db.execute('update threads set source=? where id=?',('{"subagent":[]}',self.child))
+  self.assertNotIn('groupID',self.resolve()['call'])
+ def test_warm_proof_reads_zero_bytes_and_late_dispatch_is_incremental(self):
+  original=self.rows[self.root].pop();self.paths[self.root].write_text(''.join(json.dumps(r)+'\n' for r in self.rows[self.root]))
+  owner=context.RequestContext(self.home)
+  self.assertNotIn('groupID',self.resolve(owner=owner)['call'])
+  line=(json.dumps(original)+'\n').encode()
+  with self.paths[self.root].open('ab') as f:f.write(line)
+  before=owner.index.read_bytes;first=self.resolve(owner=owner)
+  self.assertIn('groupID',first['call']);self.assertLessEqual(owner.index.read_bytes-before,len(line)+2048)
+  before=owner.index.read_bytes
+  for _ in range(3):self.assertEqual(self.resolve(owner=owner),first)
+  self.assertEqual(owner.index.read_bytes,before)
+ def test_identical_usage_events_within_one_file_are_still_ambiguous(self):
+  self.usage(self.child,9001)
+  self.assertNotIn('subtaskID',self.resolve()['call'])
+ def test_all_four_usage_counters_must_match(self):
+  for field in context.SAMPLE_USAGE_FIELDS:
+   original=self.samples[0][field];self.samples[0][field]=original+1
+   self.assertNotIn('subtaskID',self.resolve()['call'],field)
+   self.samples[0][field]=original
+ def test_child_annotation_preserves_special_call_sources_and_output_conflicts(self):
+  owner=context.RequestContext(self.home);owner.refresh_paths(True)
+  result={'call':dict(context.source_context('compaction'),associationIssue='overlap')}
+  info=context.TaskAttribution(owner).apply(self.samples,result,None)['call']
+  self.assertEqual(info['sourceKind'],'subagent');self.assertEqual(info['callSource']['title'],'自动压缩上下文')
+  self.assertEqual(info['associationIssue'],'overlap');self.assertIn('groupID',info)
+ def test_ordinary_usage_history_cannot_evict_warm_proof_cache(self):
+  row=dict(timestamp=datetime.datetime.fromtimestamp(105,datetime.timezone.utc).isoformat(),type='event_msg',
+   payload=dict(type='token_count',info=dict(last_token_usage=dict(input_tokens=100,output_tokens=30,reasoning_output_tokens=10,cached_input_tokens=50))))
+  with self.paths[self.root].open('a') as f:f.write((json.dumps(row)+'\n')*10000)
+  owner=context.RequestContext(self.home);owner.index.MAX_FACTS=64
+  first=self.resolve(owner=owner);before=owner.index.read_bytes
+  self.assertIn('groupID',first['call'])
+  for _ in range(4):self.assertEqual(self.resolve(owner=owner),first)
+  self.assertEqual(owner.index.read_bytes,before)
+  self.assertLess(sum(len(v['records']) for v in owner.index.files.values()),20)
+ def test_nested_subtasks_require_the_entire_explicit_chain_and_reject_cycles(self):
+  leaf='019f0000-1111-7000-8000-000000000003'
+  self.paths[leaf]=self.home/'sessions'/('rollout-'+leaf+'.jsonl');self.rows[leaf]=[]
+  self.add(leaf,1,'session_meta',dict(id=leaf))
+  with sqlite3.connect(self.home/'state_5.sqlite') as db:
+   db.execute('insert into threads values(?,?,?,?,?,?,?)',(leaf,str(self.paths[leaf]),json.dumps(dict(subagent=dict(thread_spawn=dict(parent_thread_id=self.child)))),'subagent','/root/collect/verify',None,'/project'))
+  self.dispatch(self.child,leaf,'child-turn',9002)
+  self.start(leaf,'leaf-turn','child-turn','parent-turn',9100);self.usage(leaf,9101)
+  self.samples=[dict(self.samples[0],conversationID=leaf,startedAt=9100,completedAt=9102)]
+  self.assertEqual(self.resolve()['call']['rootConversationID'],self.root)
+  with sqlite3.connect(self.home/'state_5.sqlite') as db:
+   db.execute('update threads set source=? where id=?',(json.dumps(dict(subagent=dict(thread_spawn=dict(parent_thread_id=leaf)))),self.child))
+  self.assertNotIn('groupID',self.resolve()['call'])
+
 if __name__=='__main__':unittest.main()

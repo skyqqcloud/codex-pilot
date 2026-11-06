@@ -3,6 +3,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 /usr/bin/python3 -m unittest discover -s tests -p 'test_backend.py' -v
+/usr/bin/python3 -m unittest discover -s tests -p 'test_quota_history.py' -v
 /usr/bin/python3 -m unittest discover -s tests -p 'test_tps_capture.py' -v
 /usr/bin/python3 -m unittest discover -s tests -p 'test_request_context.py' -v
 /usr/bin/python3 -m unittest discover -s tests -p 'test_localization.py' -v
@@ -17,3 +18,8 @@ swiftc -parse-as-library -swift-version 5 \
   "$ROOT/app/Telemetry/"*.swift "$ROOT/tests/telemetry-check.swift" \
   -o "$CHECK_BUILD/telemetry-check"
 "$CHECK_BUILD/telemetry-check" "$@"
+swiftc -parse-as-library -swift-version 5 \
+  -sdk "$SDK" -module-cache-path "$CHECK_BUILD/ModuleCache" \
+  "$ROOT/app/Telemetry/"*.swift "$ROOT/tests/quota-history-check.swift" \
+  -o "$CHECK_BUILD/quota-history-check"
+"$CHECK_BUILD/quota-history-check"

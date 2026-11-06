@@ -15,6 +15,8 @@ enum PanelLayout {
     static let modelControlWidth = (width - contentInset * 2 - metricSpacing) / 2
     static let requestRowHeight: CGFloat = 48
     static let requestHistoryHeight = requestRowHeight * 4.5
+    static let modelRowHeight: CGFloat = 38
+    static let modelHistoryHeight = modelRowHeight * 4.5
 }
 
 struct PanelPalette {

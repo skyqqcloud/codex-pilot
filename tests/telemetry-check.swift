@@ -46,11 +46,56 @@ struct TelemetryChecks {
         try speedIntegrityBoundaries()
         try indexedSpeedsPreserveResults()
         try fastModelIsolation()
+        try statisticsAndRetries()
         print("Telemetry: 14 checks passed, including indexed all-model results, latest/last-five request speeds and insufficient/invalid samples.")
         if CommandLine.arguments.contains("--live") {
             let snapshot = await SessionScanner().refreshByModel()
             print("Live collection: \(snapshot.aggregate.status.rawValue); models: \(snapshot.modelNames.count); malformed structural records: \(snapshot.aggregate.malformedRelevantLines)")
         }
+    }
+
+    static func statisticsAndRetries() throws {
+        let now = 1_000_000.0
+        func sample(_ id: String, _ age: Double, _ reasoning: Int = 0) -> RequestSpeedSample {
+            RequestSpeedSample(id: id, model: id, completedAt: now-age,
+                outputTokens: 272, durationSeconds: 1.829, inputTokens: 1000,
+                reasoningTokens: reasoning, cachedTokens: 100, ttftSeconds: 1.092,
+                nonReasoningDurationSeconds: reasoning == 0 ? 0.080598 : nil)
+        }
+        let burst = sample("wire", 20)
+        try expect(abs(burst.rate!-148.71514) < 0.001, "buffered log produced the 3374.8 TPS regression")
+        let records = [burst,sample("pending",10,100),sample("day",7200),sample("week",90000),sample("old",700000)]
+        let history = RequestSpeedSnapshot(samples: records)
+        try expect(history.latest(model: "")?.rate == nil && history.latestMeasured(model: "")?.id == "wire",
+                   "latest-completion semantics changed or menu fallback did not select a measured call")
+        try expect(history.latestMeasured(model: "pending") == nil, "menu borrowed another model's speed")
+        for (range,count) in [(RequestStatisticsRange.hour,2),(.day,3),(.week,4),(.all,5)] {
+            let filtered = records.filter { range.contains($0,now:now) }
+            try expect(filtered.count==count && RequestSpeedSnapshot(samples:filtered).modelNames.count==count,
+                       "time filter left old models or changed range boundaries")
+        }
+        try expect(RequestStatisticsRange.day.contains(sample("edge",86400),now:now) &&
+                   !RequestStatisticsRange.all.contains(sample("future",-1),now:now), "time filter boundary is incorrect")
+        var retries = RequestRetrySchedule()
+        retries.update(unresolved:["a"],attempted:[],now:0)
+        try expect(retries.next==2 && retries.due(now:1).isEmpty,"retry ran immediately")
+        retries.update(unresolved:["a","b"],attempted:[],now:1)
+        try expect(retries.due(now:2)==["a"],"another call reset an older call's retry deadline")
+        retries.update(unresolved:["a","b"],attempted:["a"],now:2)
+        try expect(retries.due(now:16).isEmpty && retries.due(now:17)==["a","b"],"retry batch bypassed the 15s budget")
+        retries.update(unresolved:["a","b"],attempted:["a","b"],now:17)
+        try expect(retries.due(now:32)==["b"] && retries.next==32,"per-call attempts were shared or reset")
+        retries.update(unresolved:["a"],attempted:[],now:33)
+        try expect(retries.next==77,"resolved call retained a wakeup")
+        retries.update(unresolved:["a"],attempted:["a"],now:77)
+        try expect(retries.next==nil && retries.due(now:1000).isEmpty,"exhausted retries keep waking")
+        retries.update(unresolved:[],attempted:[],now:120)
+        try expect(retries.next==nil,"idle state has a retry timer")
+        retries.update(unresolved:["c"],attempted:[],now:200)
+        retries.noteRead(now:200)
+        try expect(retries.next==215 && retries.due(now:202).isEmpty && retries.due(now:202,piggyback:true)==["c"],
+                   "a retry started another scan too soon or could not join an already-needed file read")
+        print("Statistics/retries: 3374.8 TPS regression, measured menu fallback, independent ranges/models, finite per-call retries, traffic-independent deadlines, coalescing and idle silence passed.")
     }
 
     static func fastModelIsolation() throws {
@@ -251,7 +296,7 @@ struct TelemetryChecks {
 
     static func speedIntegrityBoundaries() throws {
         var sample = RequestSpeedSample(id: "bounds", model: "a", completedAt: 10,
-            outputTokens: 100, durationSeconds: 1, inputTokens: 200, reasoningTokens: 0,
+            outputTokens: 200, durationSeconds: 1, inputTokens: 200, reasoningTokens: 100,
             cachedTokens: 100, ttftSeconds: 1)
         sample.startedAt = 5
         sample.nonReasoningDurationSeconds = 6

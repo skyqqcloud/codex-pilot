@@ -18,5 +18,53 @@
 			<string>%lld request</string>
 		</dict>
 	</dict>
+	<key>约 1 小时下降 %lld 个百分点</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>Down %lld percentage point in about an hour</string>
+			<key>other</key>
+			<string>Down %lld percentage points in about an hour</string>
+		</dict>
+	</dict>
+	<key>约 1 小时回升 %lld 个百分点</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>Up %lld percentage point in about an hour</string>
+			<key>other</key>
+			<string>Up %lld percentage points in about an hour</string>
+		</dict>
+	</dict>
+	<key>%lld 次调用</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>%lld call</string>
+			<key>other</key>
+			<string>%lld calls</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

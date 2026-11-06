@@ -16,5 +16,53 @@
 			<string>%lld 条</string>
 		</dict>
 	</dict>
+	<key>约 1 小时下降 %lld 个百分点</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>约 1 小时下降 %lld 个百分点</string>
+			<key>other</key>
+			<string>约 1 小时下降 %lld 个百分点</string>
+		</dict>
+	</dict>
+	<key>约 1 小时回升 %lld 个百分点</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>约 1 小时回升 %lld 个百分点</string>
+			<key>other</key>
+			<string>约 1 小时回升 %lld 个百分点</string>
+		</dict>
+	</dict>
+	<key>%lld 次调用</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>%lld 次调用</string>
+			<key>other</key>
+			<string>%lld 次调用</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

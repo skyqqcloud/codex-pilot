@@ -5,6 +5,9 @@ from __future__ import annotations
 import atexit
 import fcntl
 import base64
+import hashlib
+import sqlite3
+from contextlib import closing
 import json
 import math
 import os
@@ -233,6 +236,55 @@ def cache_entry(q: dict, previous=None) -> dict:
     }
 
 
+def quota_history_id(meta: dict):
+    """A workspace plus its user, independent of slot names and plan changes."""
+    aid, email = meta.get("account_id"), meta.get("email")
+    if not all(isinstance(v, str) and v and v != "?" for v in (aid, email)):
+        return None
+    return hashlib.sha256((aid + "\0" + email.strip().casefold()).encode()).hexdigest()
+
+
+def record_quota_history(meta: dict, entry: dict) -> bool:
+    """Called only with a successful network result, never with cached fallback.
+
+    No timers or network work. Indexed inserts and hourly retention run inside
+    the existing account-operation lock. History failure cannot fail a refresh.
+    """
+    identity = quota_history_id(meta)
+    if not identity or entry.get("account_id") != meta.get("account_id"):
+        return False
+    def number(value):
+        return value if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) else None
+    def percent(value):
+        return value if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 100 else None
+    five, week = percent(entry.get("five")), percent(entry.get("week"))
+    stamp = number(entry.get("fetched_at"))
+    if stamp is None or (five is None and week is None):
+        return False
+    path = DATA / "quota-history.sqlite3"
+    try:
+        # Precreate privately: SQLite's journal inherits the database mode.
+        fd = os.open(path, os.O_CREAT | os.O_WRONLY, 0o600)
+        os.close(fd)
+        os.chmod(path, 0o600)
+        with closing(sqlite3.connect(path, timeout=.25)) as db, db:
+            db.execute("CREATE TABLE IF NOT EXISTS observations (account TEXT NOT NULL, sampled_at REAL NOT NULL, plan TEXT, five INTEGER, week INTEGER, five_seconds INTEGER, week_seconds INTEGER, five_reset REAL, week_reset REAL, PRIMARY KEY(account,sampled_at)) WITHOUT ROWID")
+            db.execute("CREATE INDEX IF NOT EXISTS observations_age ON observations(sampled_at)")
+            db.execute("CREATE TABLE IF NOT EXISTS maintenance (key TEXT PRIMARY KEY, value REAL)")
+            db.execute("INSERT OR IGNORE INTO observations VALUES (?,?,?,?,?,?,?,?,?)", (
+                identity, stamp, valid_plan(entry.get("plan")), five, week,
+                number(entry.get("five_window_seconds")), number(entry.get("week_window_seconds")),
+                number(entry.get("five_reset_at")), number(entry.get("week_reset_at"))))
+            last = db.execute("SELECT value FROM maintenance WHERE key='pruned'").fetchone()
+            now = time.time()
+            if last is None or now - last[0] >= 3600:
+                db.execute("DELETE FROM observations WHERE sampled_at < ?", (now - 30 * 86400,))
+                db.execute("INSERT OR REPLACE INTO maintenance VALUES ('pruned',?)", (now,))
+        return True
+    except (OSError, sqlite3.Error):
+        return False
+
+
 def fetch_quotas_into_cache(names: list, failures=None) -> dict:
     """Caller holds the operation lock; aliases of one account share one request."""
     failures = failures if failures is not None else []
@@ -243,8 +295,8 @@ def fetch_quotas_into_cache(names: list, failures=None) -> dict:
         if not path.is_file():
             failures.append(name)
             continue
-        aid = auth_meta(path)["account_id"]
-        key = "id:" + aid if aid != "?" else "slot:" + name
+        meta = auth_meta(path)
+        key = quota_history_id(meta) or "slot:" + name
         groups.setdefault(key, []).append(path)
     if groups:
         with ThreadPoolExecutor(max_workers=min(4, len(groups))) as executor:
@@ -258,6 +310,7 @@ def fetch_quotas_into_cache(names: list, failures=None) -> dict:
                 if quota.get("five") is not None or quota.get("week") is not None or valid_plan(quota.get("plan")):
                     for path in paths:
                         cache[path.stem] = cache_entry(quota, cache.get(path.stem))
+                    record_quota_history(auth_meta(paths[0]), cache[paths[0].stem])
                 else:
                     failures.extend(path.stem for path in paths)
     write_quota_cache(cache)
@@ -556,8 +609,10 @@ def quota_for(path: Path) -> dict:
         "week": None, "week_when": "", "week_reset_at": None,
     }
     try:
-        aid = auth_meta(path)["account_id"]
-        live_source = aid != "?" and AUTH.is_file() and auth_meta(AUTH)["account_id"] == aid
+        meta = auth_meta(path)
+        aid = meta["account_id"]
+        identity = quota_history_id(meta)
+        live_source = identity is not None and AUTH.is_file() and quota_history_id(auth_meta(AUTH)) == identity
         source = AUTH if live_source else path
         data = load_auth(source)
         original_tokens = dict(data.get("tokens") or {})
@@ -579,7 +634,7 @@ def quota_for(path: Path) -> dict:
                 save_auth(AUTH, data)
         for name in saved_slot_names():
             peer = slot_path(name)
-            if peer == path or (aid != "?" and auth_meta(peer)["account_id"] == aid):
+            if peer == path or (identity is not None and quota_history_id(auth_meta(peer)) == identity):
                 save_auth(peer, data)
         status, payload = fetch_usage(data)
     if status != 200: return empty
@@ -728,6 +783,7 @@ def list_state(fetch_quota: bool = False) -> dict:
                 "plan": cached_plan(q, meta) or meta["plan"],
                 "email": meta["email"],
                 "account_id": meta["account_id"],
+                "history_id": quota_history_id(meta),
                 "active": name == current and AUTH.is_file() and meta["account_id"] == live_meta["account_id"],
                 "five": q.get("five"),
                 "five_window_seconds": q.get("five_window_seconds"),
@@ -1036,6 +1092,7 @@ def cmd_quota(name: str) -> int:
     if ok:
         cache[name] = cache_entry(q, cache.get(name))
         write_quota_cache(cache)
+        record_quota_history(auth_meta(p), cache[name])
     cur = cache.get(name) or {}
     five = q.get("five") if ok else cur.get("five")
     five_when = (q.get("five_remain") or "") if ok else (cur.get("five_when") or "")

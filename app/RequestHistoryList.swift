@@ -9,6 +9,8 @@ struct RequestHistoryList<Row: View>: NSViewRepresentable {
     var width: CGFloat = PanelLayout.width
     var viewportHeight: CGFloat = PanelLayout.requestHistoryHeight
     var selection: String? = nil
+    var rowHeight: CGFloat = PanelLayout.requestRowHeight
+    var columnID: String = "request"
     let row: (Int) -> Row
     @Environment(\.colorScheme) private var scheme
 
@@ -30,9 +32,9 @@ struct RequestHistoryList<Row: View>: NSViewRepresentable {
         table.backgroundColor = .clear
         table.selectionHighlightStyle = .none
         table.intercellSpacing = .zero
-        table.rowHeight = PanelLayout.requestRowHeight
+        table.rowHeight = rowHeight
         table.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
-        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("request"))
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(columnID))
         column.width = width
         column.minWidth = width
         column.maxWidth = width
@@ -52,19 +54,20 @@ struct RequestHistoryList<Row: View>: NSViewRepresentable {
         scroll.appearance = appearance
         table.appearance = appearance
         scroll.scrollerKnobStyle = scheme == .dark ? .light : .dark
-        scroll.hasVerticalScroller = CGFloat(ids.count) * PanelLayout.requestRowHeight > viewportHeight
+        scroll.hasVerticalScroller = CGFloat(ids.count) * rowHeight > viewportHeight
+        table.rowHeight = rowHeight
         let origin = scroll.contentView.bounds.origin
         if changed { table.reloadData() }
         if let column = table.tableColumns.first {
             column.minWidth = width; column.maxWidth = width; column.width = width
         }
         table.setFrameSize(NSSize(width: width,
-                                  height: CGFloat(ids.count) * PanelLayout.requestRowHeight))
+                                  height: CGFloat(ids.count) * rowHeight))
         let visible = table.rows(in: table.visibleRect)
         if visible.location != NSNotFound {
             for index in visible.location..<min(ids.count, NSMaxRange(visible)) {
                 if let cell = table.view(atColumn: 0, row: index, makeIfNecessary: false) as? HistoryCell<Row> {
-                    cell.setContent(row(index).environment(\.colorScheme, scheme), width: width)
+                    cell.setContent(row(index).environment(\.colorScheme, scheme), width: width, height: rowHeight)
                 }
             }
         }
@@ -93,7 +96,7 @@ struct RequestHistoryList<Row: View>: NSViewRepresentable {
             let identifier = NSUserInterfaceItemIdentifier("request-cell")
             let cell = tableView.makeView(withIdentifier: identifier, owner: nil) as? HistoryCell<Row> ?? HistoryCell<Row>()
             cell.identifier = identifier
-            cell.setContent(parent.row(row).environment(\.colorScheme, parent.scheme), width: parent.width)
+            cell.setContent(parent.row(row).environment(\.colorScheme, parent.scheme), width: parent.width, height: parent.rowHeight)
             return cell
         }
     }
@@ -109,8 +112,8 @@ private final class RequestTableView: NSTableView {
 
 private final class HistoryCell<Row: View>: NSTableCellView {
     private var host: NSHostingView<AnyView>?
-    func setContent<Content: View>(_ content: Content, width: CGFloat) {
-        let root = AnyView(content.frame(width: width, height: PanelLayout.requestRowHeight))
+    func setContent<Content: View>(_ content: Content, width: CGFloat, height: CGFloat) {
+        let root = AnyView(content.frame(width: width, height: height))
         if let host { host.rootView = root }
         else {
             let host = NSHostingView(rootView: root)

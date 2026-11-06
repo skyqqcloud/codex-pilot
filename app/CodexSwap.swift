@@ -16,6 +16,7 @@ struct SlotRow: Identifiable, Hashable {
     let fetchedAt: Double?
     var fiveWindowSeconds: Int? = nil
     var weekWindowSeconds: Int? = nil
+    var quotaHistoryID: String? = nil
 
     func withQuota(_ q: SlotQuota) -> SlotRow {
         SlotRow(
@@ -23,7 +24,8 @@ struct SlotRow: Identifiable, Hashable {
             five: q.five, fiveWhen: q.fiveWhen, fiveResetAt: q.fiveResetAt,
             week: q.week, weekWhen: q.weekWhen, weekResetAt: q.weekResetAt,
             fetchedAt: q.fetchedAt ?? fetchedAt,
-            fiveWindowSeconds: q.fiveWindowSeconds, weekWindowSeconds: q.weekWindowSeconds
+            fiveWindowSeconds: q.fiveWindowSeconds, weekWindowSeconds: q.weekWindowSeconds,
+            quotaHistoryID: quotaHistoryID
         )
     }
 
@@ -125,7 +127,8 @@ enum CodexSwap {
                 weekResetAt: doubleish(s["week_reset_at"]),
                 fetchedAt: doubleish(s["fetched_at"]),
                 fiveWindowSeconds: intish(s["five_window_seconds"]),
-                weekWindowSeconds: intish(s["week_window_seconds"])
+                weekWindowSeconds: intish(s["week_window_seconds"]),
+                quotaHistoryID: s["history_id"] as? String
             )
         }
         return ListState(

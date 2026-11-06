@@ -27,7 +27,9 @@ struct RequestSpeedSample: Codable, Identifiable, Sendable, Equatable {
         return outputTokens - reasoningTokens
     }
     var outputDuration: Double? {
-        let value = nonReasoningDurationSeconds ?? (reasoningTokens == 0 ? durationSeconds : nil)
+        // With no reasoning, the transport already times exactly the output
+        // being counted. A buffered consumer log must not shorten that phase.
+        let value = reasoningTokens == 0 ? durationSeconds : nonReasoningDurationSeconds
         guard let value, value.isFinite, value >= 0.001, value <= 3600 else { return nil }
         if let start = startedAt {
             guard start.isFinite, completedAt.isFinite, start < completedAt,
@@ -113,6 +115,9 @@ struct RequestSpeedSnapshot: Codable, Sendable, Equatable {
         Array((ordered[model] ?? []).prefix(count))
     }
     func latest(model: String) -> RequestSpeedSample? { recent(model: model, count: 1).first }
+    func latestMeasured(model: String) -> RequestSpeedSample? {
+        (ordered[model] ?? []).first { $0.rate != nil }
+    }
     func averageResult(model: String) -> RequestSpeedAverage {
         let requests = recent(model: model)
         let rates = requests.compactMap(\.rate)
@@ -122,5 +127,21 @@ struct RequestSpeedSnapshot: Codable, Sendable, Equatable {
     func average(model: String) -> Double? { averageResult(model: model).value }
     func history(model: String) -> [RequestSpeedSample] {
         histories[model] ?? []
+    }
+}
+
+enum RequestStatisticsRange: Int, CaseIterable, Identifiable {
+    case hour = 3600, day = 86400, week = 604800, all = 0
+    var id: Int { rawValue }
+    var title: String {
+        switch self {
+        case .hour: return L10n.string("最近 1 小时")
+        case .day: return L10n.string("最近 24 小时")
+        case .week: return L10n.string("最近 7 天")
+        case .all: return L10n.string("全部时间")
+        }
+    }
+    func contains(_ sample: RequestSpeedSample, now: Double) -> Bool {
+        sample.completedAt <= now && (self == .all || sample.completedAt >= now - Double(rawValue))
     }
 }

@@ -26,7 +26,15 @@ final class SwapStore: ObservableObject {
     @Published private(set) var autoRefresh: Set<String> = []
     @Published private(set) var throughputLoaded = false
     @Published private(set) var throughputRefreshing = false
-    @Published private(set) var requestPresentation = RequestPresentationSnapshot()
+    @Published private(set) var requestPresentation = RequestPresentationSnapshot() { didSet { rebuildStatistics() } }
+    @Published private(set) var statisticsSpeeds = RequestSpeedSnapshot()
+    @Published var statisticsRange: RequestStatisticsRange {
+        didSet {
+            defaults.set(statisticsRange.rawValue, forKey: "RequestStatisticsRange")
+            selectedRequestID = nil
+            rebuildStatistics()
+        }
+    }
     @Published private(set) var captureEnabled = false
     @Published private(set) var captureError: String?
     @Published private(set) var captureProcessRunning = false
@@ -49,7 +57,7 @@ final class SwapStore: ObservableObject {
     private var fileObserver: TelemetryFileObserver?
     private var sampleStamp: TelemetryFileStamp?
     private var contextRetryTask: Task<Void, Never>?
-    private var contextRetryAttempt = 0
+    private var contextRetries = RequestRetrySchedule()
     private var collectorRestartTask: Task<Void, Never>?
     private var collectorRestartAttempt = 0
     private var messageTask: Task<Void, Never>?
@@ -57,7 +65,6 @@ final class SwapStore: ObservableObject {
     private var lastPanelRefresh = Date()
     private var throughputTask: Task<Void, Never>?
     private var refreshRequested = false
-    private var retryRequested = false
 
     init(defaults: UserDefaults = .standard, scanner: SessionScanner = SessionScanner(), speedFile: URL? = nil) {
         self.defaults = defaults
@@ -67,6 +74,8 @@ final class SwapStore: ObservableObject {
         self.speedFile = speedFile ?? TelemetryCapture.samplesURL
         capture = speedFile == nil ? TelemetryCapture() : nil
         selectedModel = defaults.string(forKey: "ThroughputModel") ?? ""
+        statisticsRange = defaults.object(forKey: "RequestStatisticsRange") == nil ? .day :
+            RequestStatisticsRange(rawValue: defaults.integer(forKey: "RequestStatisticsRange")) ?? .day
         showMenuBarTPS = defaults.bool(forKey: "ShowMenuBarTPS")
         appearance = AppAppearance(rawValue: defaults.string(forKey: "Appearance") ?? "") ?? .system
         autoRefresh = Set(defaults.stringArray(forKey: "AutoRefreshSlots") ?? [])
@@ -89,9 +98,9 @@ final class SwapStore: ObservableObject {
     var requestSpeeds: RequestSpeedSnapshot { requestPresentation.speeds }
     var requestContexts: [String: RequestCallContext] { requestPresentation.contexts }
     var requestHistoryReady: Bool { requestPresentation.ready }
-    var latestSpeed: RequestSpeedSample? { requestSpeeds.latest(model: selectedModel) }
-    var averageSpeed: Double? { requestSpeeds.average(model: selectedModel) }
-    var recentSpeeds: [RequestSpeedSample] { requestSpeeds.history(model: selectedModel) }
+    var latestSpeed: RequestSpeedSample? { statisticsSpeeds.latest(model: selectedModel) }
+    var averageSpeed: Double? { statisticsSpeeds.average(model: selectedModel) }
+    var recentSpeeds: [RequestSpeedSample] { statisticsSpeeds.history(model: selectedModel) }
     var detailSpeed: RequestSpeedSample? {
         recentSpeeds.first { $0.id == selectedRequestID } ?? latestSpeed
     }
@@ -121,16 +130,22 @@ final class SwapStore: ObservableObject {
             try? RequestMessageReader.contexts(samples, home: home, fullID: sample.id)[sample.id]
         }.value
     }
-    var modelNames: [String] {
-        var names = requestSpeeds.modelNames
-        if !selectedModel.isEmpty && !names.contains(selectedModel) { names.append(selectedModel) }
-        return names.sorted()
+    func rebuildStatistics(now: Double = Date().timeIntervalSince1970) {
+        let samples = requestSpeeds.samples.filter { statisticsRange.contains($0, now: now) }
+        if statisticsSpeeds.samples != samples { statisticsSpeeds = RequestSpeedSnapshot(samples: samples) }
+        if !selectedModel.isEmpty && !statisticsSpeeds.modelNames.contains(selectedModel) { selectedModel = "" }
     }
-    var menuBarText: String { latestSpeed?.rate.map { String(format: "%.1f t/s", $0) } ?? "— t/s" }
+    var modelNames: [String] { statisticsSpeeds.modelNames }
+    var menuBarSpeed: RequestSpeedSample? { statisticsSpeeds.latestMeasured(model: selectedModel) }
+    var menuBarText: String { menuBarSpeed?.rate.map { String(format: "%.1f t/s", $0) } ?? "— t/s" }
     var menuBarQuota: MenuBarQuota { MenuBarQuota(account: currentRow) }
     var menuBarHelp: String {
-        let model = selectedModel.isEmpty ? L10n.string("全部模型") : PanelFormat.model(selectedModel)
-        let speed = L10n.string("最近一次输出（\(model)）：\(menuBarText)")
+        let model = menuBarSpeed.map { PanelFormat.model($0.statisticsModel) } ??
+            (selectedModel.isEmpty ? L10n.string("全部模型") : PanelFormat.model(selectedModel))
+        let time = menuBarSpeed.map { Date(timeIntervalSince1970: $0.completedAt).formatted(
+            Date.FormatStyle(date: .abbreviated, time: .standard).locale(L10n.locale)) } ?? "—"
+        let speed = L10n.string("最近一次可靠测速（\(model)）：\(menuBarText)\n采样时间：\(time)") +
+            (latestSpeed?.rate == nil && latestSpeed != nil ? "\n" + L10n.string("最新调用暂无可靠计时") : "")
         guard let row = currentRow else { return L10n.string("Codex Pilot\n\(speed)\n未找到已保存的当前激活账号") }
         return L10n.string("Codex Pilot\n\(speed)\n当前账号：\(row.planTitle) · \(row.email)\n\(menuBarQuota.help)")
     }
@@ -141,22 +156,18 @@ final class SwapStore: ObservableObject {
     }
     var needsSetup: Bool { throughputLoaded && (!hasLiveAuth || !captureEnabled || captureNeedsVerification) }
 
-    func refreshThroughput(retryUnresolved: Bool = false) async {
+    func refreshThroughput() async {
         if let throughputTask {
             // A file may change while the previous snapshot is being prepared.
             // Coalesce that event, then check it before leaving this refresh.
             refreshRequested = true
-            retryRequested = retryRequested || retryUnresolved
             await throughputTask.value
             return
         }
         let task = Task(priority: .background) {
-            var retry = retryUnresolved
             repeat {
                 self.refreshRequested = false
-                await self.prepareThroughput(retryUnresolved: retry)
-                retry = self.retryRequested
-                self.retryRequested = false
+                await self.prepareThroughput()
             } while self.refreshRequested
             self.throughputTask = nil
         }
@@ -164,10 +175,17 @@ final class SwapStore: ObservableObject {
         await task.value
     }
 
-    private func prepareThroughput(retryUnresolved: Bool) async {
+    private func prepareThroughput() async {
+        contextRetries.update(unresolved: unresolvedRetryIDs(), attempted: [], now: Date().timeIntervalSince1970)
+        let now = Date().timeIntervalSince1970
+        let fileChanged = (try? TelemetryFileStamp(speedFile)) != sampleStamp
+        let retryIDs = contextRetries.due(now: now, piggyback: fileChanged)
+        var didRead = false
         defer {
             if throughputRefreshing { throughputRefreshing = false }
             if !throughputLoaded { throughputLoaded = true }
+            if didRead { contextRetries.noteRead(now: Date().timeIntervalSince1970) }
+            scheduleContextRetry(attempted: didRead ? retryIDs : [])
         }
         do {
             if let capture {
@@ -178,16 +196,12 @@ final class SwapStore: ObservableObject {
             } else if !captureEnabled { captureEnabled = true }
             if FileManager.default.fileExists(atPath: speedFile.path) {
                 let stamp = try TelemetryFileStamp(speedFile)
-                guard !requestHistoryReady || stamp != sampleStamp || retryUnresolved else {
+                guard !requestHistoryReady || stamp != sampleStamp || !retryIDs.isEmpty else {
                     if captureError != nil { captureError = nil }
                     return
                 }
                 throughputRefreshing = true
-                if stamp != sampleStamp {
-                    contextRetryTask?.cancel()
-                    contextRetryTask = nil
-                    contextRetryAttempt = 0
-                }
+                didRead = true
                 let file = speedFile, home = codexHome, previous = requestPresentation
                 let presentation = try await Task.detached(priority: .background) {
                     let snapshot = try JSONDecoder().decode(RequestSpeedSnapshot.self, from: Data(contentsOf: file))
@@ -215,9 +229,10 @@ final class SwapStore: ObservableObject {
                     var timingConversations = Set(samples.filter { sample in
                         sample.nonReasoningDurationSeconds == nil &&
                         (!previous.ready || changedIDs.contains(sample.id) ||
-                         (retryUnresolved && Date().timeIntervalSince1970 - sample.completedAt < 120))
+                         retryIDs.contains(sample.id))
                     }.compactMap(\.conversationID))
                     timingConversations.formUnion(currentIDs.keys.filter { currentIDs[$0] != previousIDs[$0] })
+                    timingConversations.formIntersection(Set(samples.filter { $0.reasoningTokens > 0 }.compactMap(\.conversationID)))
                     // Neighboring calls remain part of timing validation so
                     // cache reuse cannot conceal overlapping streams.
                     let timingSamples = samples.filter { $0.conversationID.map(timingConversations.contains) ?? false }
@@ -229,7 +244,8 @@ final class SwapStore: ObservableObject {
                     }
                     let speeds = RequestSpeedSnapshot(samples: samples)
                     let history = speeds.history(model: "")
-                    let pending = RequestMessageReader.summarySamples(history, previous: previous, retryUnresolved: retryUnresolved)
+                    let pending = RequestMessageReader.summarySamples(history, previous: previous,
+                        retryUnresolved: !retryIDs.isEmpty, retryIDs: retryIDs)
                     let refreshed = try RequestMessageReader.contexts(pending, home: home)
                     let retainedIDs = Set(history.map(\.id))
                     var contexts = previous.contexts.filter { retainedIDs.contains($0.key) }
@@ -247,7 +263,6 @@ final class SwapStore: ObservableObject {
                     contextRevision += 1
                 }
                 sampleStamp = stamp
-                scheduleContextRetry()
             } else if !requestHistoryReady {
                 requestPresentation = RequestPresentationSnapshot(ready: true)
             }
@@ -255,24 +270,27 @@ final class SwapStore: ObservableObject {
         } catch { captureError = error.localizedDescription }
     }
 
-    private func scheduleContextRetry() {
-        guard capture != nil, contextRetryTask == nil, contextRetryAttempt < 3 else { return }
-        let unresolved = requestSpeeds.samples.contains { sample in
-            Date().timeIntervalSince1970 - sample.completedAt < 120 &&
-                (requestContexts[sample.id]?.historyResolved != true || sample.nonReasoningDurationSeconds == nil)
-        }
-        guard unresolved else { return }
-        let delay = [2, 10, 60][contextRetryAttempt]
-        let expectedStamp = sampleStamp
-        contextRetryAttempt += 1
+    private func unresolvedRetryIDs(now: Double = Date().timeIntervalSince1970) -> Set<String> {
+        Set(requestSpeeds.samples.filter { sample in
+            (0...RequestRetrySchedule.lifetime).contains(now - sample.completedAt) &&
+                (requestContexts[sample.id]?.historyResolved != true ||
+                 (sample.streamedOutputTokens > 0 && sample.rate == nil))
+        }.map(\.id))
+    }
+
+    private func scheduleContextRetry(attempted: Set<String>) {
+        let now = Date().timeIntervalSince1970
+        contextRetries.update(unresolved: unresolvedRetryIDs(now: now), attempted: attempted, now: now)
+        contextRetryTask?.cancel(); contextRetryTask = nil
+        guard capture != nil, let next = contextRetries.next else { return }
+        let delay = max(0.05, next - now)
         contextRetryTask = Task(priority: .background) { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
             guard !Task.isCancelled, let self else { return }
             self.contextRetryTask = nil
-            // New traffic is already covered by the coalesced file observer.
-            // A late-context retry must not bypass its active refresh budget.
-            guard (try? TelemetryFileStamp(self.speedFile)) == expectedStamp else { return }
-            await self.refreshThroughput(retryUnresolved: true)
+            // Reuse the coalesced refresh and per-call budget even if another
+            // conversation has written new samples since this was scheduled.
+            await self.refreshThroughput()
         }
     }
 
@@ -313,6 +331,7 @@ final class SwapStore: ObservableObject {
     // Appearance and key-window notifications can arrive together. Show the
     // existing snapshot immediately and run at most one refresh for that opening.
     func refreshForPanel() async {
+        rebuildStatistics()
         guard Date().timeIntervalSince(lastPanelRefresh) >= 5 else { return }
         lastPanelRefresh = Date()
         collectorRestartAttempt = 0

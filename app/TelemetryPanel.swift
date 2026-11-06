@@ -40,7 +40,8 @@ struct ThroughputPanel: View {
         if !store.throughputLoaded { return L10n.string("正在读取统计…") }
         if let sample = store.latestSpeed {
             let date = Date(timeIntervalSince1970: sample.completedAt)
-            let average = store.requestSpeeds.averageResult(model: store.selectedModel)
+            if sample.rate == nil { return L10n.string("最新调用暂无可靠计时") }
+            let average = store.statisticsSpeeds.averageResult(model: store.selectedModel)
             let count = average.measuredCount < 5 ? L10n.string(" · 均值 \(average.measuredCount) 次有效") : ""
             return L10n.string("上次 \(date.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(L10n.locale)))\(count)")
         }
@@ -63,7 +64,7 @@ struct ThroughputPanel: View {
         }.frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
             .accessibilityValue(value.map { "\(PanelFormat.rate($0)) token/s" } ?? L10n.string("暂无样本"))
-            .help(L10n.string("每次 API 的非推理输出 token ÷ 对应输出阶段耗时；推理 token 单独展示。") + store.requestSpeeds.averageResult(model: store.selectedModel).explanation)
+            .help(L10n.string("每次 API 的非推理输出 token ÷ 对应输出阶段耗时；推理 token 单独展示。") + store.statisticsSpeeds.averageResult(model: store.selectedModel).explanation)
     }
 }
 
@@ -76,6 +77,17 @@ struct SpeedModelPicker: View {
                 store.modelNames.map { PanelPickerOption(value: $0, title: PanelFormat.model($0)) }, width: width)
             .frame(width: width, height: PanelLayout.controlHeight)
             .accessibilityIdentifier("throughput-model")
+    }
+}
+
+struct SpeedTimePicker: View {
+    @ObservedObject var store: SwapStore
+    var width: CGFloat = PanelLayout.modelControlWidth
+    var body: some View {
+        PanelPicker(L10n.string("统计时间"), selection: $store.statisticsRange,
+            options: RequestStatisticsRange.allCases.map { PanelPickerOption(value: $0, title: $0.title) }, width: width)
+            .frame(width: width, height: PanelLayout.controlHeight)
+            .accessibilityIdentifier("throughput-time")
     }
 }
 
@@ -97,12 +109,18 @@ struct ThroughputDetailPanel: View {
         let detail = store.detailSpeed
         let groups = store.requestGroups
         let rows = RequestHistoryRow.make(groups, expanded: expandedGroups)
+        let models = displayedModels
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text(L10n.string("统计模型"))
                 Spacer()
                 SpeedModelPicker(store: store, width: PanelLayout.modelControlWidth)
             }.padding(.vertical, 10)
+            HStack {
+                Text(L10n.string("统计时间"))
+                Spacer()
+                SpeedTimePicker(store: store)
+            }.padding(.bottom, 10)
             Divider()
             HStack {
                 Text(L10n.string("输出速度"))
@@ -121,20 +139,30 @@ struct ThroughputDetailPanel: View {
                 Text(L10n.string("最近 1 次")).frame(width: 67, alignment: .trailing)
                 Text(L10n.string("5 次平均")).frame(width: 67, alignment: .trailing)
             }.font(.system(size: 10)).foregroundStyle(palette.secondary).padding(.top, 12).padding(.bottom, 4)
-            if displayedModels.isEmpty {
+            if models.isEmpty {
                 Text(store.requestHistoryReady ? L10n.string("暂无测速样本") : L10n.string("正在读取测速…"))
                     .foregroundStyle(palette.secondary).padding(.vertical, 15)
             } else {
-                ForEach(displayedModels, id: \.self) { model in
-                    HStack {
-                        Text(PanelFormat.model(model)).lineLimit(1).truncationMode(.middle)
-                        Spacer(minLength: 6)
-                        Text(rate(store.requestSpeeds.latest(model: model)?.rate)).frame(width: 67, alignment: .trailing)
-                        Text(rate(store.requestSpeeds.average(model: model))).frame(width: 67, alignment: .trailing)
-                            .help(store.requestSpeeds.averageResult(model: model).explanation)
-                    }.monospacedDigit().padding(.vertical, 11)
-                    Divider()
+                RequestHistoryList(ids: models, onSelect: { _ in },
+                    width: PanelLayout.width - PanelLayout.contentInset * 2,
+                    viewportHeight: PanelLayout.modelHistoryHeight,
+                    rowHeight: PanelLayout.modelRowHeight, columnID: "model-summary") { index in
+                    let model = models[index]
+                    return VStack(spacing: 0) {
+                        HStack {
+                            Text(PanelFormat.model(model)).lineLimit(1).truncationMode(.middle)
+                            Spacer(minLength: 6)
+                            Text(rate(store.statisticsSpeeds.latest(model: model)?.rate)).frame(width: 67, alignment: .trailing)
+                            Text(rate(store.statisticsSpeeds.average(model: model))).frame(width: 67, alignment: .trailing)
+                                .help(store.statisticsSpeeds.averageResult(model: model).explanation)
+                        }.font(.system(size: 12)).foregroundStyle(palette.ink).monospacedDigit()
+                            .frame(height: PanelLayout.modelRowHeight - 0.5)
+                        Divider()
+                    }
                 }
+                .frame(height: min(PanelLayout.modelHistoryHeight, CGFloat(models.count) * PanelLayout.modelRowHeight))
+                .id(store.statisticsRange)
+                .accessibilityIdentifier("speed-model-list")
             }
             HStack {
                 section(L10n.string("最近请求"))
@@ -144,7 +172,10 @@ struct ThroughputDetailPanel: View {
                     .foregroundStyle(palette.tertiary).padding(.top, 16).padding(.bottom, 3)
             }
             if store.requestHistoryReady {
-                RequestHistoryList(ids: rows.map { $0.sample.id }, onSelect: store.selectRequest) { index in
+                RequestHistoryList(ids: rows.map(\.id), onSelect: { id in
+                    guard let row = rows.first(where: { $0.id == id }) else { return }
+                    if row.isAPI { store.selectRequest(id) }
+                }) { index in
                     let row = rows[index]
                     return requestRow(row, selectedID: detail?.id)
                         .padding(.horizontal, PanelLayout.contentInset)
@@ -214,7 +245,8 @@ struct ThroughputDetailPanel: View {
     }
 
     private var displayedModels: [String] {
-        store.selectedModel.isEmpty ? store.requestSpeeds.modelNames : [store.selectedModel]
+        guard store.requestHistoryReady else { return [] }
+        return store.selectedModel.isEmpty ? store.statisticsSpeeds.modelNames : [store.selectedModel]
     }
     private func keepSelectionVisible(groups: [RequestHistoryGroup], rows: [RequestHistoryRow]) {
         let selected = store.detailSpeed?.id
@@ -272,10 +304,18 @@ struct ThroughputDetailPanel: View {
         Text(text).font(.system(size: 11)).foregroundStyle(PanelPalette(scheme: scheme).secondary)
             .padding(.top, 12).padding(.bottom, 3)
     }
-    private func requestRow(_ row: RequestHistoryRow, selectedID: String?) -> some View {
+    @ViewBuilder private func requestRow(_ row: RequestHistoryRow, selectedID: String?) -> some View {
+        if row.isAPI {
+            apiRequestRow(row, selectedID: selectedID)
+        } else {
+            RequestHierarchyHeading(row: row, context: store.requestContexts[row.sample.id],
+                expanded: expandedGroups.contains(row.groupID!)) { toggleGroup(row.groupID!) }
+        }
+    }
+    private func apiRequestRow(_ row: RequestHistoryRow, selectedID: String?) -> some View {
         let sample = row.sample
         let initiatingPreview = row.preview
-        let indented = row.indented
+        let indented = row.indent > 0
         let palette = PanelPalette(scheme: scheme)
         let selected = selectedID == sample.id
         let context = store.requestContexts[sample.id]
@@ -348,7 +388,7 @@ struct ThroughputDetailPanel: View {
                 }
             }
             Rectangle().fill(palette.rule.opacity(0.65)).frame(height: 0.5)
-        }.padding(.leading, indented ? 14 : 0)
+        }.padding(.leading, CGFloat(row.indent) * 14)
             .overlay(alignment: .leading) {
                 if indented {
                     Rectangle().fill(palette.rule).frame(width: 1).padding(.leading, 3)

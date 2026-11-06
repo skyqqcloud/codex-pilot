@@ -62,6 +62,12 @@ class LocalizationTests(unittest.TestCase):
         self.assertEqual(english['%lld 条']['count']['one'], '%lld request')
         self.assertEqual(english['%lld 条']['count']['other'], '%lld requests')
 
+    def test_quota_change_plural_rules(self):
+        rules = plistlib.loads((ROOT / 'app/Resources/en.lproj/Localizable.stringsdict').read_bytes())
+        for key in ['约 1 小时下降 %lld 个百分点', '约 1 小时回升 %lld 个百分点']:
+            self.assertIn('percentage point in', rules[key]['count']['one'])
+            self.assertIn('percentage points in', rules[key]['count']['other'])
+
 
 if __name__ == '__main__':
     unittest.main()

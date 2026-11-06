@@ -112,6 +112,16 @@ with sqlite3.connect(root / 'fixtures/state_5.sqlite') as db:
     db.execute('delete from threads')
     db.execute('insert into threads values(?,?,?,?)',(conversation,str(sessions / ('rollout-'+conversation+'.jsonl')),'Native layout checks','/projects/Codex Pilot'))
 (root / 'fixtures/speeds.json').write_text(json.dumps(dict(samples=samples)))
+history = root / 'fixtures/quota-history.sqlite3'
+history.unlink(missing_ok=True)
+with sqlite3.connect(history) as db:
+    db.execute('CREATE TABLE observations(account TEXT,sampled_at REAL,plan TEXT,five INTEGER,week INTEGER,five_seconds INTEGER,week_seconds INTEGER,five_reset REAL,week_reset REAL,PRIMARY KEY(account,sampled_at)) WITHOUT ROWID')
+    rows=[]
+    for i in range(289):
+        t=stamp-(288-i)*300
+        if 110 <= i <= 130: continue  # sleep / offline interval
+        rows.append(('a'*64,t,'pro',max(12,100-(i%60)*2),90-i//10,18000,604800,stamp-86400+(i//60+1)*18000,stamp+500000))
+    db.executemany('INSERT INTO observations VALUES (?,?,?,?,?,?,?,?,?)',rows)
 PY
 cp -R "$ROOT/app/Resources/"*.lproj "$CHECK_BUILD/Checker.app/Contents/Resources/"
 SDK="$(xcrun --show-sdk-path)"
